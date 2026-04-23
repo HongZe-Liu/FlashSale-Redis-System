@@ -33,6 +33,10 @@ public class MailUtils {
 
     public static void sendMail(String email, String code) throws MessagingException {
 
+        System.out.println("email(to) = " + email);
+        System.out.println("from(env) = " + System.getenv("GMAIL_FROM"));
+        System.out.println("appPass(env) is null? " + (System.getenv("GMAIL_APP_PASS") == null));
+
         // 1 SMTP 配置（邮件发送协议）：Properties -> 告诉 java 如何连接服务器
 
         // 1.1 创建Properties 类用于记录邮箱的一些属性
@@ -51,9 +55,8 @@ public class MailUtils {
         props.put("mail.smtp.ssl.enable", "true");
         props.put("mail.debug", "true");
 
-        final String from = "hongzeliu2013@gmail.com";
-        final  String appPass = "uddlnlwjxqtunivr";
-
+        final String from = System.getenv("GMAIL_FROM");
+        final  String appPass = System.getenv("GMAIL_APP_PASS");
 
         // 2 SMTP 认证（Authenticator）-> 告诉 java 登录用的账号/授权码是什么
 

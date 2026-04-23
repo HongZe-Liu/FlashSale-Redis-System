@@ -3,8 +3,14 @@ package com.hmdp.utils;
 public class RedisConstants {
     public static final String LOGIN_CODE_KEY = "login:code:";
     public static final Long LOGIN_CODE_TTL = 2L;
+    public static final String LOGIN_CODE_LIMIT_KEY = "login:code:limit:"; // 限流
+    public static final Long LOGIN_CODE_LIMIT_TTL = 60L;
+    public static final String LOGIN_CODE_FAIL_KEY = "login:code:fail:";
+    public static final Long LOGIN_CODE_FAIL_TTL = 5L;
+    public static final Long LOGIN_CODE_MAX_RETRY = 5L;
     public static final String LOGIN_USER_KEY = "login:token:";
-    public static final Long LOGIN_USER_TTL = 36000L;
+    public static final Long LOGIN_USER_TTL = 60L;
+    public static final String LOGIN_REFRESH_KEY = "login:refresh:";
 
     public static final Long CACHE_NULL_TTL = 2L;
 
@@ -20,4 +26,5 @@ public class RedisConstants {
     public static final String FEED_KEY = "feed:";
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";
+    public static final Long  REFRESH_TTL = 7L;
 }
