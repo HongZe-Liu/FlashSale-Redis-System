@@ -87,10 +87,10 @@ public class UserController {
         try{
             MailUtils.sendMail(phone,code);
             stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);
-            log.info("已经发送验证码：{}", code);
+            log.info("验证码发送成功，email={}", MaskUtils.maskEmail(phone));
         }catch(MessagingException e){
             stringRedisTemplate.delete(limitKey);
-            log.error("邮件发送失败，email={}", phone, e);
+            log.error("邮件发送失败，email={}", MaskUtils.maskEmail(phone), e);
             return Result.fail("邮件发送失败");
         }
         return Result.ok("验证码发送成功");
@@ -122,7 +122,6 @@ public class UserController {
 
         // 4. 校验验证码
         String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
-        log.info("code={} cacheCode={}", code, cacheCode);
         if(code == null || !code.equals(cacheCode)) {
             Long failCount = stringRedisTemplate.opsForValue().increment(failKey);
             if (Long.valueOf(1L).equals(failCount)) {
@@ -131,6 +130,7 @@ public class UserController {
             if (failCount != null && failCount >= LOGIN_CODE_MAX_RETRY) {
                 return Result.fail("验证码错误次数过多，请稍后再试");
             }
+            log.info("验证码校验失败，email={}", MaskUtils.maskEmail(phone));
             return Result.fail("验证码不正确");
         }
         stringRedisTemplate.delete(failKey);
@@ -142,7 +142,7 @@ public class UserController {
 
         // 6. 查询用户是否存在，不存在则创建
         if(user == null) {
-            log.info("用户不存在，创建新用户");
+            log.info("用户不存在，创建新用户，email={}", MaskUtils.maskEmail(phone));
             user = userService.createUserByPhone(phone);
         }
         // 6.1 将用户存入到redis

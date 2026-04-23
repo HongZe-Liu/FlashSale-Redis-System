@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * MailUtils：发送邮件工具类（使用 JavaMail）
@@ -18,24 +19,11 @@ import java.util.Properties;
  * 核心流程（记住它）：
  * Properties(配置) -> Authenticator(认证) -> Session(会话) -> MimeMessage(邮件) -> Transport.send(发送)
  */
+@Slf4j
 public class MailUtils {
 
-    // mian方法测试
-    public static void main(String[] args) throws MessagingException {
-
-        System.out.println("java.version = " + System.getProperty("java.version"));
-        System.out.println("java.vendor  = " + System.getProperty("java.vendor"));
-        // 测试方法
-        sendMail("hongzeliu2013@gmail.com", new MailUtils().achieveCode());
-    }
-
-    // sendTestMail 发送邮件
-
     public static void sendMail(String email, String code) throws MessagingException {
-
-        System.out.println("email(to) = " + email);
-        System.out.println("from(env) = " + System.getenv("GMAIL_FROM"));
-        System.out.println("appPass(env) is null? " + (System.getenv("GMAIL_APP_PASS") == null));
+        log.info("发送验证码邮件，email={}", MaskUtils.maskEmail(email));
 
         // 1 SMTP 配置（邮件发送协议）：Properties -> 告诉 java 如何连接服务器
 
@@ -53,7 +41,7 @@ public class MailUtils {
 
         // 1.4 开启SSL
         props.put("mail.smtp.ssl.enable", "true");
-        props.put("mail.debug", "true");
+        props.put("mail.debug", "false");
 
         final String from = System.getenv("GMAIL_FROM");
         final  String appPass = System.getenv("GMAIL_APP_PASS");
