@@ -7,6 +7,7 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.SystemConstants;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -42,6 +43,7 @@ public class ShopController {
      * @return 商铺id
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result saveShop(@RequestBody Shop shop) {
         // 写入数据库
         shopService.save(shop);
@@ -55,6 +57,7 @@ public class ShopController {
      * @return 无
      */
     @PutMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result updateShop(@RequestBody Shop shop) {
         // 写入数据库
         return shopService.update(shop);

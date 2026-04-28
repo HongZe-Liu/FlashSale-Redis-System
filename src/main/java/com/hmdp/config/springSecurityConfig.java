@@ -8,11 +8,13 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 
 // spring security 配置类
 @Configuration
 @EnableWebSecurity
-
+// 开启 Spring Security 的方法级权限控制，让 @PreAuthorize 这类注解真正生效
+@EnableGlobalMethodSecurity(prePostEnabled = true) //
 public class springSecurityConfig extends WebSecurityConfigurerAdapter {
 
     // 注入,构造authRefreshFilter

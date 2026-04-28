@@ -50,6 +50,8 @@ import static com.hmdp.utils.RedisConstants.*;
 @RequestMapping("/user")
 public class UserController {
 
+    private static final String USER_STATUS_ACTIVE = "ACTIVE";
+
     @Resource
     private IUserService userService;
 
@@ -145,10 +147,15 @@ public class UserController {
             log.info("用户不存在，创建新用户，email={}", MaskUtils.maskEmail(phone));
             user = userService.createUserByPhone(phone);
         }
-        // 6.1 将用户存入到redis
+        // 6.1 存在则验证状态
+        if (!USER_STATUS_ACTIVE.equals(user.getStatus())) {
+            return Result.fail("账号已被禁用");
+        }
 
-        // 5.1.1 生成access / refresh token 并放入redis
-        String token = JwtUtils.generateToken(user.getId(),user.getNickName(),"user");
+        // 7. 生成access / refresh token 并放入redis
+        String role = user.getRole() == null ? "USER" : user.getRole();
+        String sid = UUID.randomUUID().toString();
+        String token = JwtUtils.generateToken(user.getId(), user.getNickName(), role, sid);
         String jti  = JwtUtils.getJti(token);
         String refreshToken = refreshTokenUtils.generateRftoken();
 
@@ -156,10 +163,13 @@ public class UserController {
 
         String icon = userDTO.getIcon() == null ? "" : userDTO.getIcon();
         String nickName = userDTO.getNickName() == null ? "" : userDTO.getNickName();
+        String userRole = userDTO.getRole() == null ? "USER" : userDTO.getRole();
+
         HashMap<String,String> userMap = new HashMap<>(); // 创建hashmap
         userMap.put("id", user.getId().toString()); // 存入图标
         userMap.put("nickName", nickName); // 存入ID
         userMap.put("icon", icon); // 存入用户名
+        userMap.put("role", userRole); // 存入角色
 
         // 5.1.2 创建Key -> 将 常量和token 组合
         String tokenKey = LOGIN_USER_KEY + jti;
@@ -169,10 +179,11 @@ public class UserController {
         stringRedisTemplate.expire(tokenKey,60, TimeUnit.MINUTES);
         // 5.1.5 存入Refresh token
         stringRedisTemplate.opsForValue().set(
-                LOGIN_REFRESH_KEY + refreshToken, String.valueOf(user.getId()),
+                LOGIN_REFRESH_KEY + refreshToken, sid,
                 REFRESH_TTL,
                 TimeUnit.DAYS
         );
+        writeSessionState(sid, user.getId(), refreshToken, jti);
         // 5.1.6 写入HTTP ONLY COOKIE
         ResponseCookie cookie = ResponseCookie.from("refresh_token" , refreshToken)
                 .httpOnly(true)
@@ -197,18 +208,30 @@ public class UserController {
                          HttpServletResponse response){
        // 1. 获取解析请求头request
         String token = request.getHeader("Authorization");
+        String sid = null;
        // 2. 验证token
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
             if (JwtUtils.isValid(token)) {
                 String jti = JwtUtils.getJti(token);
+                sid = JwtUtils.getSid(token);
                 stringRedisTemplate.delete(LOGIN_USER_KEY + jti);
             }
         }
 
         // 3. 检查refresh token
         if(refreshToken != null && !refreshToken.isBlank()){
-            stringRedisTemplate.delete(LOGIN_REFRESH_KEY + refreshToken);
+            String refreshSid = stringRedisTemplate.opsForValue().get(LOGIN_REFRESH_KEY + refreshToken);
+            if (refreshSid != null && !refreshSid.isBlank()) {
+                sid = refreshSid;
+            } else {
+                stringRedisTemplate.delete(LOGIN_REFRESH_KEY + refreshToken);
+                stringRedisTemplate.delete(LOGIN_REFRESH_USED_KEY + refreshToken);
+            }
+        }
+
+        if (sid != null && !sid.isBlank()) {
+            invalidateSession(sid);
         }
 
         // 4. 清除 refresh Cookie -> 将cookie设置为空
@@ -256,23 +279,61 @@ public class UserController {
 
         // 1. 验证 refreshtoken
         if (refreshToken == null || refreshToken.isBlank()){
+            auditRefreshFailure("missing_refresh_cookie", null, null, null);
             return Result.fail("用户未登陆");
         }
 
-        // 2. redis 校验 -> 并获取 userId
+        // 2. redis 校验 -> 并获取 sid
         String refreshKey = LOGIN_REFRESH_KEY + refreshToken;
-        String userIdStr = stringRedisTemplate.opsForValue().get(refreshKey);
-        if(userIdStr == null || userIdStr.isBlank()){
+        String sid = stringRedisTemplate.opsForValue().get(refreshKey);
+        if(sid == null || sid.isBlank()){
+            String usedSid = stringRedisTemplate.opsForValue().get(LOGIN_REFRESH_USED_KEY + refreshToken);
+            if (usedSid != null && !usedSid.isBlank()) {
+                auditRefreshFailure("refresh_token_reuse_detected", usedSid, null, refreshToken);
+                invalidateSession(usedSid);
+                return Result.fail("登录状态异常，请重新登录");
+            }
+            auditRefreshFailure("refresh_token_not_found", null, null, refreshToken);
             return Result.fail("用户不存在");
         }
 
-        // 3. 生成新的 access + refreshtoken (实现轮换)
+        String sessionKey = LOGIN_SESSION_KEY + sid;
+        Map<Object, Object> sessionMap = stringRedisTemplate.opsForHash().entries(sessionKey);
+        if (sessionMap == null || sessionMap.isEmpty()) {
+            auditRefreshFailure("session_not_found", sid, null, refreshToken);
+            stringRedisTemplate.delete(refreshKey);
+            return Result.fail("登录状态已失效，请重新登录");
+        }
+
+        String currentRefreshToken = valueAsString(sessionMap.get("currentRefreshToken"));
+        String currentAccessJti = valueAsString(sessionMap.get("currentAccessJti"));
+        String userIdStr = valueAsString(sessionMap.get("userId"));
+        if (userIdStr == null || userIdStr.isBlank()) {
+            auditRefreshFailure("session_user_missing", sid, null, refreshToken);
+            invalidateSession(sid);
+            return Result.fail("登录状态已失效，请重新登录");
+        }
+        if (!refreshToken.equals(currentRefreshToken)) {
+            auditRefreshFailure("refresh_token_session_mismatch", sid, userIdStr, refreshToken);
+            invalidateSession(sid);
+            return Result.fail("登录状态异常，请重新登录");
+        }
+
+        // 3. 校验状态 + 生成新的 access + refreshtoken (实现轮换)
         Long userId = Long.valueOf(userIdStr);
         User user = userService.getById(userId);
         if(user == null){
+            auditRefreshFailure("user_not_found", sid, userIdStr, refreshToken);
+            invalidateSession(sid);
             return Result.fail("用户不存在，请重新登录");
         }
-        String newAccessToken = JwtUtils.generateToken(user.getId(),user.getNickName(),"user");
+        if(!USER_STATUS_ACTIVE.equals(user.getStatus())){
+            auditRefreshFailure("user_disabled", sid, userIdStr, refreshToken);
+            invalidateSession(sid);
+            return Result.fail("账号已被禁用");
+        }
+        String role = user.getRole() == null ? "USER" : user.getRole();
+        String newAccessToken = JwtUtils.generateToken(user.getId(), user.getNickName(), role, sid);
         String newRefreshToken = refreshTokenUtils.generateRftoken();
 
         // 4. 写入redis
@@ -282,18 +343,25 @@ public class UserController {
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
         String icon = userDTO.getIcon() == null ? "" : userDTO.getIcon();
         String nickName = userDTO.getNickName() == null ? "" : userDTO.getNickName();
+        String userRole = userDTO.getRole() == null ? "USER" : userDTO.getRole();
 
         // 4.1 存入map
         Map<String,String> userMap = new HashMap<>();
         userMap.put("id",user.getId().toString());
         userMap.put("nickName",nickName);
         userMap.put("icon",icon);
+        userMap.put("role",userRole);
         // 4.2 将user存入Redis + 添加过期时间
         stringRedisTemplate.opsForHash().putAll( LOGIN_USER_KEY+ accessJti,userMap);
         stringRedisTemplate.expire(LOGIN_USER_KEY + accessJti ,LOGIN_USER_TTL, TimeUnit.MINUTES);
-        // 4.3 删除旧refresh
+        if (currentAccessJti != null && !currentAccessJti.isBlank()) {
+            stringRedisTemplate.delete(LOGIN_USER_KEY + currentAccessJti);
+        }
+        // 4.3 删除旧refresh，并进入 used 标记区
         stringRedisTemplate.delete(refreshKey);
-        stringRedisTemplate.opsForValue().set(LOGIN_REFRESH_KEY + newRefreshToken, userIdStr, REFRESH_TTL, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(LOGIN_REFRESH_USED_KEY + refreshToken, sid, REFRESH_TTL, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(LOGIN_REFRESH_KEY + newRefreshToken, sid, REFRESH_TTL, TimeUnit.DAYS);
+        writeSessionState(sid, userId, newRefreshToken, accessJti);
 
         // 5. 回写 Http cookie only
         ResponseCookie cookie = ResponseCookie.from("refresh_token", newRefreshToken )
@@ -306,5 +374,50 @@ public class UserController {
             response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString()); // 写入响应头
         // 6, 返回新的access
         return Result.ok(newAccessToken);
+    }
+
+    private void writeSessionState(String sid, Long userId, String refreshToken, String accessJti) {
+        Map<String, String> sessionMap = new HashMap<>();
+        sessionMap.put("userId", String.valueOf(userId));
+        sessionMap.put("currentRefreshToken", refreshToken);
+        sessionMap.put("currentAccessJti", accessJti);
+        stringRedisTemplate.opsForHash().putAll(LOGIN_SESSION_KEY + sid, sessionMap);
+        stringRedisTemplate.expire(LOGIN_SESSION_KEY + sid, REFRESH_TTL, TimeUnit.DAYS);
+    }
+
+    private void invalidateSession(String sid) {
+        String sessionKey = LOGIN_SESSION_KEY + sid;
+        Map<Object, Object> sessionMap = stringRedisTemplate.opsForHash().entries(sessionKey);
+        if (sessionMap != null && !sessionMap.isEmpty()) {
+            String currentAccessJti = valueAsString(sessionMap.get("currentAccessJti"));
+            String currentRefreshToken = valueAsString(sessionMap.get("currentRefreshToken"));
+            if (currentAccessJti != null && !currentAccessJti.isBlank()) {
+                stringRedisTemplate.delete(LOGIN_USER_KEY + currentAccessJti);
+            }
+            if (currentRefreshToken != null && !currentRefreshToken.isBlank()) {
+                stringRedisTemplate.delete(LOGIN_REFRESH_KEY + currentRefreshToken);
+            }
+        }
+        stringRedisTemplate.delete(sessionKey);
+    }
+
+    private void auditRefreshFailure(String reason, String sid, String userId, String refreshToken) {
+        log.warn("refresh失败, reason={}, sid={}, userId={}, refreshToken={}",
+                reason,
+                sid,
+                userId,
+                maskToken(refreshToken));
+    }
+
+    private String maskToken(String token) {
+        if (token == null || token.isBlank()) {
+            return "null";
+        }
+        int prefix = Math.min(8, token.length());
+        return token.substring(0, prefix) + "***";
+    }
+
+    private String valueAsString(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 }

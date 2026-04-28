@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -31,13 +32,17 @@ public class JwtUtils {
     }
 
     // 1. 生成token
-        public static String generateToken(Long userId, String userName, String role){
+        public static String generateToken(Long userId, String userName, String role, String sid){
             // 当前时间
             Instant now = Instant.now(); // 当前时间
             // 过期时间
             Instant exp = now.plusSeconds(EXP_SECONDS); // 过期时间
             // jti: 每个 JWT 的唯一 ID
             String jti = UUID.randomUUID().toString();
+            Map<String, Object> claims = new HashMap<>();
+            claims.put("userId", userId);
+            claims.put("role", role);
+            claims.put("sid", sid);
             // 构造Token函数
             return Jwts.builder()
                     // 标准字段:必须包含
@@ -46,10 +51,7 @@ public class JwtUtils {
                     .setExpiration(Date.from(exp)) // exp: 过期时间)
                     .setId(jti)
                     // 自定义字段:id,角色,权限...
-                    .addClaims(Map.of(
-                            "userId",userId,
-                            "role",role
-                    ))
+                    .addClaims(claims)
                     // 算法签名
                     .signWith(KEY, SignatureAlgorithm.HS256)
                     // 最终生成
@@ -107,7 +109,14 @@ public class JwtUtils {
             return claims.getExpiration();
         }
 
-    // 8. 读取gti
+    // 8. 获取 sid
+        public static String getSid(String token){
+            Claims claims = getClaims(token);
+            Object v = claims.get("sid");
+            return v == null ? null : String.valueOf(v);
+        }
+
+    // 9. 读取gti
         public static String getJti(String token){
             Claims claims = getClaims(token);
             return claims.getId();

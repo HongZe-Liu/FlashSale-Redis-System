@@ -30,6 +30,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             user.setPhone(phone);
             // 写入昵称（默认）
             user.setNickName("User_" + RandomUtil.randomString(8));
+            // 添加角色
+            user.setRole("USER");
+            // 添加状态
+            user.setStatus("ACTIVE");
             // 保存到数据库
             this.save(user);
             return user;

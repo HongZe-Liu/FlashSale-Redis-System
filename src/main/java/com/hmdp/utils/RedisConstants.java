@@ -6,11 +6,13 @@ public class RedisConstants {
     public static final String LOGIN_CODE_LIMIT_KEY = "login:code:limit:"; // 限流
     public static final Long LOGIN_CODE_LIMIT_TTL = 60L;
     public static final String LOGIN_CODE_FAIL_KEY = "login:code:fail:";
-    public static final Long LOGIN_CODE_FAIL_TTL = 5L;
+    public static final Long LOGIN_CODE_FAIL_TTL = 1L;
     public static final Long LOGIN_CODE_MAX_RETRY = 5L;
     public static final String LOGIN_USER_KEY = "login:token:";
     public static final Long LOGIN_USER_TTL = 60L;
     public static final String LOGIN_REFRESH_KEY = "login:refresh:";
+    public static final String LOGIN_REFRESH_USED_KEY = "login:refresh:used:";
+    public static final String LOGIN_SESSION_KEY = "login:session:";
 
     public static final Long CACHE_NULL_TTL = 2L;
 

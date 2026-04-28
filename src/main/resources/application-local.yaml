@@ -1,0 +1,10 @@
+# 本地环境
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/hmdp?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: ""
+  redis:
+    host: localhost
+    port: 6379

@@ -10,14 +10,6 @@ import lombok.experimental.Accessors;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-/**
- * <p>
- * 
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
 @Data
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
@@ -62,5 +54,13 @@ public class User implements Serializable {
      */
     private LocalDateTime updateTime;
 
+    /**
+     * 角色
+     */
+    private String role;
 
+    /**
+    * 状态
+    */
+    private String status;
 }

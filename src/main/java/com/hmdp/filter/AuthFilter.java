@@ -16,9 +16,11 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 // 认证过滤器
 @Component
 public class AuthFilter extends OncePerRequestFilter {
@@ -65,12 +67,26 @@ public class AuthFilter extends OncePerRequestFilter {
             UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(),false);
             stringRedisTemplate.expire(key, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
 
+            // 6.1 从登陆态中取出角色
+            String role = userDTO.getRole();
+
+            // 6.2 准备一个 Spring Security 使用的权限集合
+            List<GrantedAuthority> authorities = Collections.emptyList();
+
+            // 6.3 如果当前role不为空,转成 Spring Security 能识别的权限对象
+            if(role != null && !role.isBlank()){
+                // SimpleGrantedAuthority 是 Spring Security 提供的、能够被框架直接识别的权限对象实现类。
+                authorities = List.of(new SimpleGrantedAuthority(
+                        "ROLE_" + role));
+            }
+
+
             // 7. 将用户放入SecurityContext - （principal 就是 userDTO）
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                     userDTO,
                     null,
-                    Collections.emptyList()
+                     authorities
                 );
             SecurityContextHolder.getContext().setAuthentication(authentication);
             filterChain.doFilter(request,response);

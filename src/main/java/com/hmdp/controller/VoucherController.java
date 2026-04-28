@@ -4,6 +4,7 @@ package com.hmdp.controller;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Voucher;
 import com.hmdp.service.IVoucherService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -29,6 +30,7 @@ public class VoucherController {
      * @return 优惠券id
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result addVoucher(@RequestBody Voucher voucher) {
         voucherService.save(voucher);
         return Result.ok(voucher.getId());
@@ -40,6 +42,7 @@ public class VoucherController {
      * @return 优惠券id
      */
     @PostMapping("seckill")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result addSeckillVoucher(@RequestBody Voucher voucher) {
         voucherService.addSeckillVoucher(voucher);
         return Result.ok(voucher.getId());
