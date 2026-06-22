@@ -1,4 +1,4 @@
-HMDP Production Hardening Checklist
+Flash Sale Payment Production Hardening Checklist
 
 Scope
 - Login
@@ -73,7 +73,7 @@ P0
 - Actually connect cache breakdown strategies to business query path.
   queryById currently uses only queryWithPassThrough().
 - Add TTL randomization to reduce avalanche risk.
-- Fix ShopType cache strategy.
+- Fix MerchantType cache strategy.
   Add TTL and explicit invalidation/update policy.
 - Upgrade lock implementation safety.
   Current tryLock/unlock is basic and not production-grade.

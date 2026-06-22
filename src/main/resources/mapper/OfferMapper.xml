@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.flashsale.payment.mapper.OfferMapper">
+
+    <select id="queryOffersByMerchant" resultType="com.flashsale.payment.entity.Offer" parameterType="java.lang.Long">
+        SELECT
+            o.`id`, o.`merchant_id`, o.`title`, o.`description`, o.`rules`, o.`price_amount`,
+            o.`face_value_amount`, o.`status`, f.`stock`, f.`begin_time`, f.`end_time`
+        FROM offers o
+        LEFT JOIN flash_sale_offers f ON o.id = f.offer_id
+        WHERE o.merchant_id = #{merchantId} AND o.status = 1
+    </select>
+</mapper>

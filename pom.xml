@@ -12,10 +12,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.hmdp</groupId>
-    <artifactId>hm-dianping</artifactId>
+    <groupId>com.flashsale.payment</groupId>
+    <artifactId>flash-sale-payment</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>hm-dianping</name>
+    <name>Flash Sale Payment Backend</name>
+    <description>High-concurrency flash sale and payment backend built with Spring Boot, Redis, RabbitMQ, and MySQL.</description>
 
     <properties>
         <java.version>11</java.version>

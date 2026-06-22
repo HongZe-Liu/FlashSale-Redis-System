@@ -8,3 +8,8 @@ spring:
   redis:
     host: localhost
     port: 6379
+
+app:
+  auth:
+    refresh-cookie:
+      secure: false

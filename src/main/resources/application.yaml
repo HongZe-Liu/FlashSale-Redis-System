@@ -4,20 +4,20 @@ server:
   port: 8080
 spring:
   application:
-    name: hmdp
+    name: flash-sale-payment
   rabbitmq:
-      host: 172.16.98.128
-      port: 5672
-      username: hongze
-      password: 1995
+      host: ${RABBITMQ_HOST:localhost}
+      port: ${RABBITMQ_PORT:5672}
+      username: ${RABBITMQ_USERNAME:guest}
+      password: ${RABBITMQ_PASSWORD:guest}
   datasource:
-    url: jdbc:mysql://172.16.98.128:3306/hmdp?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
-    password: 123
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/hmdp?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
   redis:
-    host: 172.16.98.128
-    port: 6379
-    # password:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
     lettuce:
       pool:
         max-active: 10
@@ -27,12 +27,21 @@ spring:
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
-  type-aliases-package: com.hmdp.entity # 别名扫描包
+  type-aliases-package: com.flashsale.payment.entity # 别名扫描包
 logging:
   level:
     org.springframework.amqp: DEBUG
     org.springframework.rabbit: DEBUG
     com.rabbitmq: DEBUG
 jwt:
-  secret: ${JWT_SECRET:replace-with-your-very-long-secret-key-at-least-32-bytes!!!}
+  secret: ${JWT_SECRET:dev-only-change-me-dev-only-change-me-32bytes}
 
+app:
+  auth:
+    refresh-cookie:
+      name: refresh_token
+      http-only: true
+      secure: true
+      same-site: Lax
+      path: /user/refresh
+      max-age-days: 7
