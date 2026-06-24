@@ -149,17 +149,57 @@ upload
 配置可以通过 profile 或环境变量切换。
 ```
 
+### 当前完成情况
+
+```text
+已完成：
+- 项目定位已收缩为 flash-sale-payment。
+- 旧点评类主链路已弱化，当前核心保留登录、商家、优惠、秒杀订单。
+- 用户登录支持 email 验证码、JWT access token、refresh token。
+- 数据库表已收敛为 tb_user / merchants / offers / flash_sale_offers / orders 等核心表。
+- 秒杀活动支持管理员发布，发布时从 MySQL 预热 Redis。
+- 秒杀下单支持 Redis Lua 原子裁决、Redis Stream 异步落库、一人一单和库存扣减。
+- local profile 已指向 FlashSalePaymentApplication schema。
+- 商家详情接口返回结构已修正为单层 Result。
+- Redis Stream 消费线程已支持应用关闭时优雅退出。
+```
+
+```text
+阶段一仍建议补充：
+- README 和接口文档持续同步。
+- 最小自动化验收测试。
+- Docker Compose 本地依赖编排。
+```
+
 ## 6. 阶段二：Redis Stream 改 RabbitMQ
 
-### 目标
+### 阶段二定位
 
-Redis 继续负责秒杀入口裁决，RabbitMQ 接管订单异步消息。
+阶段二先采用方案 A：
+
+```text
+Redis Lua 负责秒杀资格裁决和 Redis 预占。
+Java 在 Lua 成功后投递 RabbitMQ。
+RabbitMQ Consumer 异步创建 MySQL 订单。
+如果 MQ 投递明确失败，立即补偿 Redis 库存和用户资格。
+```
+
+这个方案不是最终的金融级可靠消息方案，而是当前项目第二阶段的可控演进版本。
+它的价值是先把 RabbitMQ 削峰、手动 ACK、重试、死信和补偿链路跑通，再逐步理解每个组件为什么存在。
+
+后续如果要进一步强化生产级一致性，再演进到：
+
+```text
+方案 B：Redis pending reservation + 后台补偿任务
+方案 C：数据库 outbox / reservation 表 + 后台可靠投递
+```
 
 ### 改造前
 
 ```text
-Redis Lua
-  -> XADD stream.orders
+用户请求秒杀
+  -> Redis Lua 原子裁决
+  -> Lua XADD stream.flashsale.orders
   -> Redis Stream Consumer
   -> MySQL 创建订单
 ```
@@ -167,50 +207,357 @@ Redis Lua
 ### 改造后
 
 ```text
-Redis Lua
-  -> 返回秒杀资格裁决结果
+用户请求秒杀
+  -> Redis Lua 原子裁决和预占
   -> Java 发送 RabbitMQ 消息
-  -> RabbitMQ Consumer
-  -> MySQL 创建订单
+  -> RabbitMQ Consumer 手动 ACK 消费
+  -> MySQL 事务创建订单
 ```
 
-### 主要任务
-
-- 修改 `seckill.lua`，去掉 `XADD stream.orders`。
-- 新增 RabbitMQ exchange、queue、routing key 配置。
-- 新增秒杀订单消息 DTO。
-- 新增 MQ Producer，负责秒杀成功后的订单消息投递。
-- 新增 MQ Consumer，负责异步创建订单。
-- 使用 manual ack，订单事务成功后再确认消息。
-- 消费失败进入重试队列。
-- 超过重试上限进入死信队列。
-- 保留数据库唯一索引兜底一人一单。
-- 保留订单创建的事务边界。
-- 设计 MQ 投递失败后的 Redis 库存和用户资格补偿。
-
-### 需要进一步讨论
-
-Lua 成功后发送 MQ 不是原子操作，存在一致性窗口：
+详细链路：
 
 ```text
-Redis 预扣成功
+FlashSaleController
+  -> OrderService.placeFlashSaleOrder
+  -> 生成 orderId
+  -> 执行 flash-sale.lua
+      - 校验活动时间
+      - 校验 Redis 库存
+      - 校验一人一单
+      - 扣 Redis 库存
+      - 写入 Redis 用户资格集合
+  -> FlashSaleOrderProducer 投递 RabbitMQ
+      - publisher confirm
+      - mandatory return
+  -> 投递成功：返回 orderId
+  -> 投递失败：补偿 Redis 预占，返回失败
+
+RabbitMQ Consumer
+  -> 接收 FlashSaleOrderMessage
+  -> 二次校验 Redis 用户资格
+  -> 调用 createOrder(order)
+  -> MySQL 事务扣最终库存并保存订单
+  -> 成功后 basicAck
+  -> 失败进入 retry queue
+  -> 超过重试次数进入 DLQ
+```
+
+### RabbitMQ 拓扑
+
+建议使用三组 exchange / queue：
+
+```text
+flashsale.order.exchange
+  routing key: flashsale.order.create
+  -> flashsale.order.create.queue
+
+flashsale.order.retry.exchange
+  routing key: flashsale.order.retry
+  -> flashsale.order.create.retry.queue
+       x-message-ttl: 5000 或 10000
+       x-dead-letter-exchange: flashsale.order.exchange
+       x-dead-letter-routing-key: flashsale.order.create
+
+flashsale.order.dead.exchange
+  routing key: flashsale.order.dead
+  -> flashsale.order.create.dlq
+```
+
+消费失败后的流转：
+
+```text
+主队列消费失败
+  -> 投递到 retry queue
+  -> retry queue TTL 到期
+  -> 自动死信回主 exchange
+  -> 回到主队列再次消费
+
+超过最大重试次数
+  -> 投递到 dead exchange
+  -> 进入 DLQ
+  -> 执行 Redis 资格补偿
+  -> 记录错误日志
+```
+
+### 一致性边界
+
+方案 A 的核心风险是：
+
+```text
+Redis Lua 成功
 MQ 投递失败
 ```
 
-候选方案：
+因为 Redis 预扣和 RabbitMQ 投递不是一个原子事务，所以需要补偿。
+
+补偿原则：
 
 ```text
-方案 A：publisher confirm 失败后立即回滚 Redis
-方案 B：Redis pending 标记 + 后台任务补偿
-方案 C：数据库 outbox 表 + 后台可靠投递
+只有用户资格仍然存在时，才回滚库存。
+补偿必须幂等。
+补偿建议用 Lua 完成，避免重复执行导致库存加多。
 ```
 
-阶段性建议：
+补偿逻辑：
 
-- 第一版先做方案 A，简单可控。
-- 后续如果要强化可靠投递，再演进到 outbox。
+```text
+如果 SREM flashsale:order:{offerId} userId 成功：
+  INCR flashsale:stock:{offerId}
+否则：
+  不回补库存
+```
 
-### 验收标准
+还需要处理 publisher confirm 超时的不确定状态：
+
+```text
+RabbitMQ 可能已经收到消息
+Java 没有收到 confirm
+Java 执行了 Redis 补偿
+Consumer 后续又消费到了消息
+```
+
+因此 Consumer 创建订单前要二次校验 Redis 资格：
+
+```text
+如果 flashsale:order:{offerId} 不包含 userId：
+  说明资格已经被补偿或失效
+  直接 ACK，不创建订单
+```
+
+最终兜底仍然依赖 MySQL：
+
+```text
+orders 唯一索引：user_id + offer_id
+flash_sale_offers 条件扣减：stock > 0
+订单创建事务：扣库存和保存订单必须在同一个事务中完成
+```
+
+### 拆分迭代计划
+
+#### 迭代 2.1：移除 Redis Stream 写入
+
+目标：
+
+```text
+Lua 只负责秒杀资格裁决和 Redis 预占，不再负责写消息队列。
+```
+
+任务：
+
+- 修改 `flash-sale.lua`，删除 `XADD stream.flashsale.orders`。
+- 保留活动时间、库存、一人一单、Redis 预扣逻辑。
+- `OrderService.placeFlashSaleOrder` 暂时仍返回 `orderId`，为下一步接 MQ 做准备。
+
+需要理解：
+
+```text
+为什么 Redis 适合做入口裁决？
+为什么消息队列不应该继续放在 Redis Stream？
+Lua 原子性覆盖了哪些操作？
+Lua 原子性没有覆盖哪些操作？
+```
+
+验收标准：
+
+```text
+Lua 成功后 Redis 库存会减少。
+Lua 成功后用户会进入 flashsale:order:{offerId} 集合。
+Redis Stream 不再收到新订单消息。
+```
+
+#### 迭代 2.2：新增 RabbitMQ 基础配置
+
+目标：
+
+```text
+建立主队列、重试队列和死信队列，为异步下单链路准备基础设施。
+```
+
+任务：
+
+- 新增 RabbitMQ 常量或配置属性。
+- 新增 exchange、queue、binding Bean。
+- 配置 JSON message converter。
+- 配置 listener manual ack。
+- 配置 publisher confirm 和 mandatory return。
+
+需要理解：
+
+```text
+exchange、queue、routing key 分别是什么？
+为什么主队列、重试队列、死信队列要分开？
+manual ack 和 auto ack 的区别是什么？
+publisher confirm 解决什么问题？
+mandatory return 解决什么问题？
+```
+
+验收标准：
+
+```text
+应用启动后 RabbitMQ 中能看到主队列、重试队列、DLQ。
+配置类可以单独阅读并讲清每个队列的作用。
+```
+
+#### 迭代 2.3：新增秒杀订单消息和 Producer
+
+目标：
+
+```text
+Lua 成功后由 Java 投递秒杀订单消息到 RabbitMQ。
+```
+
+任务：
+
+- 新增 `FlashSaleOrderMessage` DTO。
+- 新增 `FlashSaleOrderProducer`。
+- Producer 发送消息时携带 `orderId`、`offerId`、`userId`、`createdAt`。
+- 使用 publisher confirm 判断投递结果。
+- unroutable message 要视为投递失败。
+
+需要理解：
+
+```text
+为什么消息里必须带 orderId？
+为什么不能等 Consumer 再生成 orderId？
+confirm 成功代表什么？
+return callback 代表什么？
+confirm 超时为什么是不确定状态？
+```
+
+验收标准：
+
+```text
+秒杀成功后 RabbitMQ 主队列能收到消息。
+接口返回 orderId。
+关闭 RabbitMQ 或制造路由失败时，Producer 能识别投递失败。
+```
+
+#### 迭代 2.4：新增 Redis 补偿能力
+
+目标：
+
+```text
+当 MQ 投递失败时，回滚 Redis 预扣库存和用户资格。
+```
+
+任务：
+
+- 新增 Redis 补偿 Lua 脚本。
+- 新增 `RedisReservationCompensationService`。
+- `OrderService.placeFlashSaleOrder` 在 MQ 投递失败时调用补偿。
+- 补偿日志要包含 `orderId`、`offerId`、`userId` 和失败原因。
+
+需要理解：
+
+```text
+为什么补偿必须幂等？
+为什么不能无条件 INCR 库存？
+为什么投递失败后不能长期占用用户资格？
+```
+
+验收标准：
+
+```text
+MQ 投递失败后 Redis 库存会恢复。
+MQ 投递失败后用户资格会移除。
+重复执行补偿不会把库存加多。
+```
+
+#### 迭代 2.5：新增 RabbitMQ Consumer 创建订单
+
+目标：
+
+```text
+RabbitMQ Consumer 异步创建 MySQL 订单，替换 Redis Stream 消费线程。
+```
+
+任务：
+
+- 新增 `FlashSaleOrderConsumer`。
+- 使用 `@RabbitListener` 监听主队列。
+- Consumer 创建订单前二次校验 Redis 用户资格。
+- 复用现有 `createOrder(order)` 事务。
+- 订单创建成功后手动 ACK。
+- 移除 `OrderServiceImpl` 中 Redis Stream 消费线程、pending-list 和 Stream DLQ 代码。
+
+需要理解：
+
+```text
+为什么 Consumer 要二次校验 Redis 用户资格？
+为什么订单事务成功后才能 ACK？
+为什么数据库唯一索引仍然必须保留？
+```
+
+验收标准：
+
+```text
+秒杀接口返回 orderId。
+RabbitMQ 消息被消费。
+orders 表生成订单。
+flash_sale_offers 库存减少。
+同一用户重复抢购不会生成重复订单。
+```
+
+#### 迭代 2.6：消费失败重试和死信
+
+目标：
+
+```text
+Consumer 失败时支持有限重试，超过重试次数后进入 DLQ。
+```
+
+任务：
+
+- 消费失败时读取并递增 retry count。
+- 未超过重试上限时投递到 retry exchange。
+- 超过重试上限时投递到 dead exchange。
+- DLQ 消息记录失败原因、重试次数、原始消息内容。
+- 进入 DLQ 后补偿 Redis 用户资格，必要时回补库存。
+
+需要理解：
+
+```text
+为什么不能无限重试？
+retry queue 的 TTL + DLX 是怎么让消息回到主队列的？
+什么是毒消息？
+DLQ 是排查问题用的，不是正常业务队列。
+```
+
+验收标准：
+
+```text
+人为制造消费异常时，消息会进入 retry queue。
+重试后可以重新回到主队列。
+超过最大次数后消息进入 DLQ。
+DLQ 消息包含可排查的错误信息。
+```
+
+#### 迭代 2.7：测试、文档和面试表达
+
+目标：
+
+```text
+把实现结果转化成可验证、可讲述的工程能力。
+```
+
+任务：
+
+- 补充最小自动化测试或手动验收脚本。
+- README 增加 RabbitMQ 秒杀链路说明。
+- 文档记录方案 A 的优点、不足和演进路径。
+- 整理面试表达和可能追问。
+
+需要理解：
+
+```text
+方案 A 解决了什么问题？
+方案 A 没解决什么问题？
+为什么它不是最终生产级可靠消息方案？
+如何演进到 Redis pending reservation？
+如何演进到数据库 outbox？
+```
+
+验收标准：
 
 ```text
 并发秒杀不超卖。
@@ -219,7 +566,18 @@ RabbitMQ 消费端支持手动 ACK。
 消息消费失败可以重试。
 毒消息可以进入死信队列。
 MQ 投递失败不会长期占用 Redis 库存和用户资格。
+能清楚讲出方案 A 的边界和后续演进。
 ```
+
+### 阶段二面试表达草案
+
+中文版本：
+
+> 第二阶段我将原来的 Redis Stream 异步下单链路替换为 RabbitMQ。Redis Lua 只负责高并发入口下的活动时间校验、库存预扣和一人一单资格记录；Lua 成功后由 Java 通过 RabbitMQ 投递秒杀订单消息。由于 Redis 预扣和 MQ 投递不是原子操作，我使用 publisher confirm 和 mandatory return 识别投递失败，并通过补偿 Lua 幂等回滚 Redis 库存和用户资格。Consumer 使用手动 ACK，订单事务成功后才确认消息；消费失败进入重试队列，超过重试上限进入死信队列。最终通过 Redis 资格校验、MySQL 唯一索引和条件扣库存共同兜底一致性。
+
+英文版本：
+
+> In phase two, I replaced the Redis Stream based asynchronous order pipeline with RabbitMQ. Redis Lua is responsible only for atomic flash-sale validation, stock pre-deduction, and one-user-one-order reservation. After Lua succeeds, the application publishes an order message to RabbitMQ. Since Redis reservation and MQ publishing are not atomic, publisher confirms and mandatory returns are used to detect publishing failures, and an idempotent compensation Lua script rolls back Redis stock and user reservation. The consumer uses manual acknowledgements and only ACKs after the order transaction succeeds. Failed messages are routed to retry queues and eventually to a dead-letter queue after the retry limit. MySQL unique constraints and conditional stock deduction remain the final consistency safeguards.
 
 ## 7. 阶段三：订单与支付闭环
 

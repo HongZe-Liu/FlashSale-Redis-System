@@ -187,7 +187,6 @@ public class UserController {
         stringRedisTemplate.delete(LOGIN_CODE_KEY + phone);
         return Result.ok(token);
     }
- b:
 
     /**
      * 登出功能

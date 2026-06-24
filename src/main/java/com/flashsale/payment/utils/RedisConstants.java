@@ -22,10 +22,10 @@ public class RedisConstants {
     public static final String LOCK_SHOP_KEY = "lock:shop:";
     public static final Long LOCK_SHOP_TTL = 10L;
 
-    public static final String SECKILL_STOCK_KEY = "seckill:stock:";
-    public static final String SECKILL_ORDER_KEY = "seckill:order:";
-    public static final String SECKILL_VOUCHER_KEY = "seckill:voucher:";
-    public static final Long SECKILL_CACHE_RETAIN_DAYS = 1L;
+    public static final String FLASH_SALE_STOCK_KEY = "flashsale:stock:";
+    public static final String FLASH_SALE_ORDER_KEY = "flashsale:order:";
+    public static final String FLASH_SALE_OFFER_KEY = "flashsale:offer:";
+    public static final Long FLASH_SALE_CACHE_RETAIN_DAYS = 1L;
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";
     public static final Long  REFRESH_TTL = 7L;

@@ -23,10 +23,10 @@ import java.util.concurrent.TimeUnit;
 
 
 
-import static com.flashsale.payment.utils.RedisConstants.SECKILL_CACHE_RETAIN_DAYS;
-import static com.flashsale.payment.utils.RedisConstants.SECKILL_ORDER_KEY;
-import static com.flashsale.payment.utils.RedisConstants.SECKILL_STOCK_KEY;
-import static com.flashsale.payment.utils.RedisConstants.SECKILL_VOUCHER_KEY;
+import static com.flashsale.payment.utils.RedisConstants.FLASH_SALE_CACHE_RETAIN_DAYS;
+import static com.flashsale.payment.utils.RedisConstants.FLASH_SALE_OFFER_KEY;
+import static com.flashsale.payment.utils.RedisConstants.FLASH_SALE_ORDER_KEY;
+import static com.flashsale.payment.utils.RedisConstants.FLASH_SALE_STOCK_KEY;
 
 /**
  * <p>
@@ -66,22 +66,35 @@ public class OfferServiceImpl extends ServiceImpl<OfferMapper, Offer> implements
         flashSaleOffer.setEndTime(offer.getEndTime());
 
         flashSaleOfferService.save(flashSaleOffer);
-        warmUpFlashSaleOfferCache(
-                offer.getId(),
-                offer.getStock(),
-                offer.getBeginTime(),
-                offer.getEndTime()
-        );
     }
 
     @Override
-    public Result rebuildFlashSaleOfferCache(Long offerId) {
+    public Result publishFlashSaleOffer(Long offerId) {
         if (offerId == null) {
             return Result.fail("Offer id is required");
+        }
+        Offer offer = getById(offerId);
+        if (offer == null) {
+            return Result.fail("Offer does not exist");
+        }
+        if (!Integer.valueOf(1).equals(offer.getStatus())) {
+            return Result.fail("Offer is not active");
         }
         FlashSaleOffer flashSaleOffer = flashSaleOfferService.getById(offerId);
         if (flashSaleOffer == null) {
             return Result.fail("Flash sale offer does not exist");
+        }
+        if (flashSaleOffer.getStock() == null || flashSaleOffer.getStock() <= 0) {
+            return Result.fail("Flash sale stock must be greater than zero");
+        }
+        if (flashSaleOffer.getBeginTime() == null || flashSaleOffer.getEndTime() == null) {
+            return Result.fail("Flash sale time range is required");
+        }
+        if (!flashSaleOffer.getBeginTime().isBefore(flashSaleOffer.getEndTime())) {
+            return Result.fail("Flash sale begin time must be before end time");
+        }
+        if (!flashSaleOffer.getEndTime().isAfter(LocalDateTime.now())) {
+            return Result.fail("Flash sale has already ended");
         }
         long ttlSeconds = warmUpFlashSaleOfferCache(
                 flashSaleOffer.getOfferId(),
@@ -98,10 +111,10 @@ public class OfferServiceImpl extends ServiceImpl<OfferMapper, Offer> implements
         if (offerId == null || stock == null || beginTime == null || endTime == null) {
             throw new IllegalArgumentException("Flash sale offer cache warm-up arguments are incomplete");
         }
-        String stockKey = SECKILL_STOCK_KEY + offerId;
-        String offerKey = SECKILL_VOUCHER_KEY + offerId;
-        String orderKey = SECKILL_ORDER_KEY + offerId;
-        long retainSeconds = TimeUnit.DAYS.toSeconds(SECKILL_CACHE_RETAIN_DAYS);
+        String stockKey = FLASH_SALE_STOCK_KEY + offerId;
+        String offerKey = FLASH_SALE_OFFER_KEY + offerId;
+        String orderKey = FLASH_SALE_ORDER_KEY + offerId;
+        long retainSeconds = TimeUnit.DAYS.toSeconds(FLASH_SALE_CACHE_RETAIN_DAYS);
         long ttlSeconds = flashSaleCacheTtlSeconds(endTime);
 
         stringRedisTemplate.opsForValue().set(stockKey, stock.toString());
@@ -116,7 +129,7 @@ public class OfferServiceImpl extends ServiceImpl<OfferMapper, Offer> implements
     }
 
     private void rebuildFlashSaleOrderCache(Long offerId, long ttlSeconds) {
-        String orderKey = SECKILL_ORDER_KEY + offerId;
+        String orderKey = FLASH_SALE_ORDER_KEY + offerId;
         List<Order> orders = orderService.query()
                 .select("user_id")
                 .eq("offer_id", offerId)
@@ -134,7 +147,7 @@ public class OfferServiceImpl extends ServiceImpl<OfferMapper, Offer> implements
     }
 
     private long flashSaleCacheTtlSeconds(LocalDateTime endTime) {
-        LocalDateTime expireTime = endTime.plusDays(SECKILL_CACHE_RETAIN_DAYS);
+        LocalDateTime expireTime = endTime.plusDays(FLASH_SALE_CACHE_RETAIN_DAYS);
         long ttlSeconds = Duration.between(LocalDateTime.now(), expireTime).getSeconds();
         return Math.max(ttlSeconds, 1L);
     }

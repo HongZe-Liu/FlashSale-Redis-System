@@ -10,6 +10,13 @@ spring:
       port: ${RABBITMQ_PORT:5672}
       username: ${RABBITMQ_USERNAME:guest}
       password: ${RABBITMQ_PASSWORD:guest}
+      publisher-confirm-type: correlated
+      publisher-returns: true
+      template:
+        mandatory: true
+      listener:
+        simple:
+          acknowledge-mode: manual
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://localhost:3306/hmdp?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USERNAME:root}

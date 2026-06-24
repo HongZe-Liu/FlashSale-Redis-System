@@ -41,4 +41,10 @@ public class FlashSaleController {
         return orderService.placeFlashSaleOrder(offerId, user.getId());
     }
 
+    @PostMapping("/{offerId}/publish")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result publishFlashSaleOffer(@PathVariable("offerId") Long offerId) {
+        return offerService.publishFlashSaleOffer(offerId);
+    }
+
 }

@@ -18,5 +18,5 @@ public interface IOfferService extends IService<Offer> {
 
     void createFlashSaleOffer(Offer offer);
 
-    Result rebuildFlashSaleOfferCache(Long offerId);
+    Result publishFlashSaleOffer(Long offerId);
 }

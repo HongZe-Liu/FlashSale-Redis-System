@@ -20,7 +20,7 @@ public class MerchantController {
      */
     @GetMapping("/{id}")
     public Result queryMerchantById(@PathVariable("id") Long id) {
-        return Result.ok(merchantService.queryById(id));
+        return merchantService.queryById(id);
     }
 
     /**
