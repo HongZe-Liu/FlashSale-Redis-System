@@ -118,6 +118,8 @@ INSERT INTO `tb_user_info` (`user_id`, `city`, `introduce`, `gender`, `birthday`
 DROP TABLE IF EXISTS `tb_seckill_voucher`;
 DROP TABLE IF EXISTS `tb_voucher_order`;
 DROP TABLE IF EXISTS `tb_voucher`;
+DROP TABLE IF EXISTS `payment_webhook_event`;
+DROP TABLE IF EXISTS `payment_order`;
 DROP TABLE IF EXISTS `orders`;
 DROP TABLE IF EXISTS `flash_sale_offers`;
 DROP TABLE IF EXISTS `offers`;
@@ -176,7 +178,10 @@ CREATE TABLE `orders`  (
   `offer_id` bigint(20) UNSIGNED NOT NULL,
   `pay_type` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
   `status` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
+  `pay_amount` bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+  `currency` varchar(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'EUR',
   `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expire_time` timestamp NULL DEFAULT NULL,
   `pay_time` timestamp NULL DEFAULT NULL,
   `use_time` timestamp NULL DEFAULT NULL,
   `refund_time` timestamp NULL DEFAULT NULL,
@@ -187,6 +192,60 @@ CREATE TABLE `orders`  (
 
 -- ----------------------------
 -- Records of orders
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for payment_order
+-- ----------------------------
+CREATE TABLE `payment_order` (
+  `id` bigint(20) NOT NULL,
+  `order_id` bigint(20) NOT NULL,
+  `user_id` bigint(20) UNSIGNED NOT NULL,
+  `provider` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `provider_payment_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `amount` bigint(20) UNSIGNED NOT NULL,
+  `currency` varchar(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'EUR',
+  `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `checkout_url` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `paid_at` timestamp NULL DEFAULT NULL,
+  `failure_reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uniq_payment_order_order`(`order_id`) USING BTREE,
+  UNIQUE INDEX `uniq_provider_payment`(`provider`, `provider_payment_id`) USING BTREE,
+  INDEX `idx_payment_order_user`(`user_id`) USING BTREE,
+  INDEX `idx_payment_order_status`(`status`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of payment_order
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for payment_webhook_event
+-- ----------------------------
+CREATE TABLE `payment_webhook_event` (
+  `id` bigint(20) NOT NULL,
+  `provider` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `event_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `event_type` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `provider_payment_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `order_id` bigint(20) DEFAULT NULL,
+  `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `raw_payload` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
+  `error_message` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `processed_at` timestamp NULL DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uniq_provider_event`(`provider`, `event_id`) USING BTREE,
+  INDEX `idx_webhook_order`(`order_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of payment_webhook_event
 -- ----------------------------
 
 SET FOREIGN_KEY_CHECKS = 1;

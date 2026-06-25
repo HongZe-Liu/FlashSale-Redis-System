@@ -35,7 +35,8 @@ public class springSecurityConfig extends WebSecurityConfigurerAdapter {
                         "/v2/api-docs", "/swagger-resources/**",
                         "/webjars/**", "/v3/api-docs/**",
                         "/user/code",
-                        "/user/refresh"
+                        "/user/refresh",
+                        "/payments/webhooks/mock"
                 ).permitAll()
                 .anyRequest().authenticated()
                 .and()

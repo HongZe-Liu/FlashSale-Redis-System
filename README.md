@@ -30,6 +30,10 @@ The current implementation keeps Redis for cache and atomic flash-sale checks. R
 - RabbitMQ-based asynchronous order creation with publisher confirm, manual ack, retry queue, and DLQ
 - Idempotent Redis reservation compensation when order message publishing or final consumption fails
 - MySQL transaction boundary for final order persistence
+- Pending-payment order state with amount/currency snapshots
+- Mock payment provider for local payment workflow validation
+- Payment webhook idempotency with provider event records
+- Timeout cancellation for unpaid orders with stock compensation
 - Redisson and Redis utilities for distributed coordination
 - Spring Security based authentication filter
 - Environment-driven configuration for MySQL, Redis, RabbitMQ, and JWT secret
@@ -95,6 +99,9 @@ flowchart LR
 | Flash Sale | `POST /flash-sales` | Create flash-sale offer, admin only |
 | Flash Sale | `POST /flash-sales/{offerId}/publish` | Publish flash-sale offer and preheat Redis, admin only |
 | Flash Sale | `POST /flash-sales/{offerId}/orders` | Submit flash-sale order request |
+| Payment | `POST /payments/orders/{orderId}` | Create a payment order for a pending order |
+| Payment | `GET /payments/orders/{orderId}` | Query order and payment status |
+| Payment Webhook | `POST /payments/webhooks/mock` | Local/test mock payment success webhook |
 
 ## Local Build
 
@@ -128,6 +135,11 @@ RABBITMQ_PORT
 RABBITMQ_USERNAME
 RABBITMQ_PASSWORD
 JWT_SECRET
+PAYMENT_PROVIDER
+PAYMENT_ORDER_EXPIRE_MINUTES
+PAYMENT_TIMEOUT_SCAN_FIXED_DELAY_MS
+PAYMENT_TIMEOUT_SCAN_BATCH_SIZE
+MOCK_WEBHOOK_SECRET
 ```
 
 ## Local Acceptance Flow
@@ -166,6 +178,10 @@ GET flashsale:stock:1              -> stock decreases by 1
 SISMEMBER flashsale:order:1 2      -> 1
 SELECT * FROM orders WHERE user_id = 2 AND offer_id = 1;
 RabbitMQ flashsale.order.create.queue -> message is consumed and acked
+orders.status                        -> 1 (PENDING_PAYMENT)
+orders.pay_amount                    -> copied from offers.price_amount
+orders.currency                      -> EUR
+orders.expire_time                   -> not null
 ```
 
 The RabbitMQ flash-sale order pipeline uses:
@@ -177,6 +193,46 @@ flashsale.order.dead.exchange -> flashsale.order.create.dlq
 ```
 
 If RabbitMQ publishing fails after Redis Lua has reserved stock and user qualification, the application runs an idempotent Redis compensation script. If consumption fails, the message is routed to the retry queue and eventually to the DLQ after the retry limit. The main queue also has a DLX so framework-level poison messages, such as invalid JSON, are dead-lettered instead of being silently dropped.
+
+8. Create a mock payment for the pending order:
+
+```bash
+curl -X POST http://localhost:8080/payments/orders/<order-id> \
+  -H "Authorization: Bearer <user-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"MOCK"}'
+```
+
+The response includes a mock `providerPaymentId`, amount, currency, status, and checkout URL.
+
+9. Simulate the provider payment success webhook:
+
+```bash
+curl -X POST http://localhost:8080/payments/webhooks/mock \
+  -H "Content-Type: application/json" \
+  -d '{
+    "eventId": "mock_evt_001",
+    "eventType": "payment.succeeded",
+    "providerPaymentId": "<provider-payment-id>",
+    "orderId": <order-id>,
+    "amount": 475,
+    "currency": "EUR"
+  }'
+```
+
+Expected checks after a successful mock webhook:
+
+```text
+SELECT status, pay_time FROM orders WHERE id = <order-id>;       -> status = 2 (PAID)
+SELECT status, paid_at FROM payment_order WHERE order_id = <id>; -> status = PAID
+SELECT status FROM payment_webhook_event WHERE event_id='mock_evt_001'; -> PROCESSED
+```
+
+Repeat the same webhook payload. It should return success without changing the business state again.
+
+Mock webhooks are intended for `local` and `test` profiles. In other environments, set and send `MOCK_WEBHOOK_SECRET` / `X-Mock-Webhook-Secret`.
+
+If a `PENDING_PAYMENT` order passes `expire_time`, the scheduled timeout task marks it as `EXPIRED`, marks any pending payment order as `EXPIRED`, restores MySQL stock, and restores Redis stock when the Redis stock key still exists. The first implementation keeps the one-user-one-order qualification, so the same user still cannot re-buy the same offer after expiration.
 
 ## Refactor Roadmap
 
@@ -195,8 +251,9 @@ If RabbitMQ publishing fails after Redis Lua has reserved stock and user qualifi
 3. Payment module
    - Add payment order model and order state machine
    - Add provider abstraction
-   - Integrate Stripe for EUR/Bancontact-oriented payment flow
-   - Handle webhook signature verification and idempotency
+   - Add Mock provider payment flow
+   - Handle webhook idempotency and timeout cancellation
+   - Next: integrate Stripe for EUR/Bancontact-oriented payment flow
 
 4. Observability
    - Add Spring Boot Actuator and Micrometer

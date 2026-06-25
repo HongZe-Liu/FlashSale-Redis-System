@@ -1,8 +1,13 @@
 package com.flashsale.payment.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.flashsale.payment.config.PaymentProperties;
 import com.flashsale.payment.dto.Result;
+import com.flashsale.payment.entity.Offer;
 import com.flashsale.payment.entity.Order;
+import com.flashsale.payment.enums.OrderStatus;
+import com.flashsale.payment.enums.PaymentProviderType;
+import com.flashsale.payment.mapper.OfferMapper;
 import com.flashsale.payment.mapper.OrderMapper;
 import com.flashsale.payment.mq.FlashSaleOrderMessage;
 import com.flashsale.payment.mq.FlashSaleOrderProducer;
@@ -35,6 +40,12 @@ public class OrderServiceImpl
 
     @Resource
     private IFlashSaleOfferService flashSaleOfferService;
+
+    @Resource
+    private OfferMapper offerMapper;
+
+    @Resource
+    private PaymentProperties paymentProperties;
 
     @Resource
     private FlashSaleOrderProducer flashSaleOrderProducer;
@@ -96,6 +107,12 @@ public class OrderServiceImpl
             return true;
         }
 
+        Offer offer = offerMapper.selectById(offerId);
+        if (offer == null || offer.getPriceAmount() == null || offer.getPriceAmount() <= 0) {
+            log.warn("订单金额快照创建失败，offer无效或价格非法，userId={}, offerId={}", userId, offerId);
+            return false;
+        }
+
         boolean stockUpdated = flashSaleOfferService.update()
                 .setSql("stock = stock -1")
                 .eq("offer_id", offerId)
@@ -106,6 +123,14 @@ public class OrderServiceImpl
             log.warn("数据库库存扣减失败，将由消费端触发Redis预扣补偿，userId={}, offerId={}", userId, offerId);
             return false;
         }
+
+        LocalDateTime now = LocalDateTime.now();
+        order.setPayType(PaymentProviderType.MOCK.getCode());
+        order.setStatus(OrderStatus.PENDING_PAYMENT.getCode());
+        order.setPayAmount(offer.getPriceAmount());
+        order.setCurrency("EUR");
+        order.setCreateTime(now);
+        order.setExpireTime(now.plusMinutes(paymentProperties.getOrderExpireMinutes()));
 
         boolean saved = save(order);
         if (!saved) {

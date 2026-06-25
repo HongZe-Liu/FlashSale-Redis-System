@@ -52,3 +52,9 @@ app:
       same-site: Lax
       path: /user/refresh
       max-age-days: 7
+  payment:
+    provider: ${PAYMENT_PROVIDER:MOCK}
+    order-expire-minutes: ${PAYMENT_ORDER_EXPIRE_MINUTES:15}
+    timeout-scan-fixed-delay-ms: ${PAYMENT_TIMEOUT_SCAN_FIXED_DELAY_MS:60000}
+    timeout-scan-batch-size: ${PAYMENT_TIMEOUT_SCAN_BATCH_SIZE:100}
+    mock-webhook-secret: ${MOCK_WEBHOOK_SECRET:}

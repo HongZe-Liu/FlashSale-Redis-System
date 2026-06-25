@@ -50,9 +50,24 @@ public class Order implements Serializable {
     private Integer status;
 
     /**
+     * Payment amount in the smallest currency unit, for example euro cents.
+     */
+    private Long payAmount;
+
+    /**
+     * Payment currency. First phase uses EUR.
+     */
+    private String currency;
+
+    /**
      * 下单时间
      */
     private LocalDateTime createTime;
+
+    /**
+     * Payment expiration time.
+     */
+    private LocalDateTime expireTime;
 
     /**
      * 支付时间
