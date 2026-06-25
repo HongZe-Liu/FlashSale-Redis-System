@@ -11,6 +11,7 @@ import com.flashsale.payment.mapper.OfferMapper;
 import com.flashsale.payment.mapper.OrderMapper;
 import com.flashsale.payment.mq.FlashSaleOrderMessage;
 import com.flashsale.payment.mq.FlashSaleOrderProducer;
+import com.flashsale.payment.observability.BusinessMetrics;
 import com.flashsale.payment.service.IFlashSaleOfferService;
 import com.flashsale.payment.service.IOrderService;
 import com.flashsale.payment.service.RedisReservationCompensationService;
@@ -53,6 +54,9 @@ public class OrderServiceImpl
     @Resource
     private RedisReservationCompensationService redisReservationCompensationService;
 
+    @Resource
+    private BusinessMetrics businessMetrics;
+
     private static final DefaultRedisScript<Long> FLASH_SALE_SCRIPT;
 
     static {
@@ -63,6 +67,7 @@ public class OrderServiceImpl
 
     @Override
     public Result placeFlashSaleOrder(Long offerId, Long userId) {
+        businessMetrics.recordFlashSaleRequestTotal();
         long orderId = redisIdWorker.nextId("order");
         Long result = stringRedisTemplate.execute(
                 FLASH_SALE_SCRIPT,
@@ -72,15 +77,18 @@ public class OrderServiceImpl
                 String.valueOf(orderId)
         );
         if (result == null) {
+            businessMetrics.recordFlashSaleRequestFailure("lua_result_null");
             return Result.fail("抢购失败，请稍后重试");
         }
         if (result.intValue() != 0) {
+            businessMetrics.recordFlashSaleRequestFailure(flashSaleFailReason(result.intValue()));
             return Result.fail(flashSaleFailMessage(result.intValue()));
         }
 
         FlashSaleOrderMessage message = new FlashSaleOrderMessage(orderId, offerId, userId, LocalDateTime.now());
         boolean published = flashSaleOrderProducer.publish(message);
         if (!published) {
+            businessMetrics.recordFlashSaleRequestFailure("mq_publish_failed");
             redisReservationCompensationService.compensate(
                     offerId,
                     userId,
@@ -89,6 +97,7 @@ public class OrderServiceImpl
             );
             return Result.fail("抢购失败，请稍后重试");
         }
+        businessMetrics.recordFlashSaleRequestSuccess();
         return Result.ok(orderId);
     }
 
@@ -104,12 +113,14 @@ public class OrderServiceImpl
                 .count();
         if (count > 0) {
             log.warn("订单已存在，按幂等成功处理，userId={}, offerId={}", userId, offerId);
+            businessMetrics.recordOrderCreateIdempotent();
             return true;
         }
 
         Offer offer = offerMapper.selectById(offerId);
         if (offer == null || offer.getPriceAmount() == null || offer.getPriceAmount() <= 0) {
             log.warn("订单金额快照创建失败，offer无效或价格非法，userId={}, offerId={}", userId, offerId);
+            businessMetrics.recordOrderCreateFailure("invalid_offer");
             return false;
         }
 
@@ -121,6 +132,7 @@ public class OrderServiceImpl
 
         if (!stockUpdated) {
             log.warn("数据库库存扣减失败，将由消费端触发Redis预扣补偿，userId={}, offerId={}", userId, offerId);
+            businessMetrics.recordOrderCreateFailure("db_stock_not_enough");
             return false;
         }
 
@@ -136,7 +148,25 @@ public class OrderServiceImpl
         if (!saved) {
             throw new IllegalStateException("保存秒杀订单失败");
         }
+        businessMetrics.recordOrderCreateSuccess();
         return true;
+    }
+
+    private String flashSaleFailReason(int code) {
+        switch (code) {
+            case 1:
+                return "stock_not_enough";
+            case 2:
+                return "duplicate_order";
+            case 3:
+                return "not_started";
+            case 4:
+                return "ended";
+            case 5:
+                return "not_initialized";
+            default:
+                return "unknown";
+        }
     }
 
     private String flashSaleFailMessage(int code) {

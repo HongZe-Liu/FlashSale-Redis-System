@@ -4,6 +4,7 @@ import com.flashsale.payment.config.PaymentProperties;
 import com.flashsale.payment.entity.Order;
 import com.flashsale.payment.enums.OrderStatus;
 import com.flashsale.payment.enums.PaymentStatus;
+import com.flashsale.payment.observability.BusinessMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,6 +39,9 @@ public class OrderTimeoutService {
     @Resource
     private TransactionTemplate transactionTemplate;
 
+    @Resource
+    private BusinessMetrics businessMetrics;
+
     @Scheduled(fixedDelayString = "${app.payment.timeout-scan-fixed-delay-ms:60000}")
     public void expirePendingOrders() {
         LocalDateTime now = LocalDateTime.now();
@@ -55,6 +59,7 @@ public class OrderTimeoutService {
             try {
                 Boolean expired = transactionTemplate.execute(status -> expireOrderInDatabase(order, now));
                 if (Boolean.TRUE.equals(expired)) {
+                    businessMetrics.recordOrderTimeoutExpired();
                     restoreRedisStock(order);
                 }
             } catch (Exception e) {

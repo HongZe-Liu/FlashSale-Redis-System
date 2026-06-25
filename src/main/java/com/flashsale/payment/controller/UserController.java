@@ -11,6 +11,7 @@ import com.flashsale.payment.dto.UserDTO;
 import com.flashsale.payment.entity.User;
 import com.flashsale.payment.entity.UserInfo;
 import com.flashsale.payment.mapper.UserMapper;
+import com.flashsale.payment.observability.BusinessMetrics;
 import com.flashsale.payment.service.IUserInfoService;
 import com.flashsale.payment.service.IUserService;
 import com.flashsale.payment.utils.*;
@@ -58,6 +59,8 @@ public class UserController {
     private UserMapper userMapper;
     @Resource
     private RefreshCookieProperties refreshCookieProperties;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     /**
      * 发送邮箱验证码
@@ -75,6 +78,7 @@ public class UserController {
                 // 判断是否在限制时间内(60秒内只能发送一次)
                 .setIfAbsent(limitKey, "1", LOGIN_CODE_LIMIT_TTL, TimeUnit.SECONDS);
         if (!Boolean.TRUE.equals(allowed)) {
+            businessMetrics.recordCodeRateLimited();
             return Result.fail("验证码发送过于频繁，请稍后再试");
         }
 
@@ -85,6 +89,7 @@ public class UserController {
         try{
             MailUtils.sendMail(phone,code);
             stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);
+            businessMetrics.recordCodeSent();
             log.info("验证码发送成功，email={}", MaskUtils.maskEmail(phone));
         }catch(MessagingException e){
             stringRedisTemplate.delete(limitKey);
@@ -108,6 +113,7 @@ public class UserController {
         // 2. 验证邮箱
         if(RegexUtils.isEmailInvalid(phone)) {
             log.error("账号格式不正确");
+            businessMetrics.recordLoginFailure("invalid_email");
             return Result.fail("账号不正确");
         }
 
@@ -115,6 +121,7 @@ public class UserController {
         String failKey = LOGIN_CODE_FAIL_KEY + phone; // 拼接key
         String failCountStr = stringRedisTemplate.opsForValue().get(failKey);
         if (failCountStr != null && Long.parseLong(failCountStr) >= LOGIN_CODE_MAX_RETRY) {
+            businessMetrics.recordLoginFailure("code_locked");
             return Result.fail("验证码错误次数过多，请稍后再试");
         }
 
@@ -126,9 +133,11 @@ public class UserController {
                 stringRedisTemplate.expire(failKey, LOGIN_CODE_FAIL_TTL, TimeUnit.MINUTES);
             }
             if (failCount != null && failCount >= LOGIN_CODE_MAX_RETRY) {
+                businessMetrics.recordLoginFailure("code_locked");
                 return Result.fail("验证码错误次数过多，请稍后再试");
             }
             log.info("验证码校验失败，email={}", MaskUtils.maskEmail(phone));
+            businessMetrics.recordLoginFailure("invalid_code");
             return Result.fail("验证码不正确");
         }
         stringRedisTemplate.delete(failKey);
@@ -145,6 +154,7 @@ public class UserController {
         }
         // 6.1 存在则验证状态
         if (!USER_STATUS_ACTIVE.equals(user.getStatus())) {
+            businessMetrics.recordLoginFailure("user_disabled");
             return Result.fail("账号已被禁用");
         }
 
@@ -185,6 +195,7 @@ public class UserController {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
         // 5.1.7 登录成功删除验证码信息
         stringRedisTemplate.delete(LOGIN_CODE_KEY + phone);
+        businessMetrics.recordLoginSuccess();
         return Result.ok(token);
     }
 

@@ -2,6 +2,14 @@
 
 server:
   port: 8080
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
 spring:
   application:
     name: flash-sale-payment

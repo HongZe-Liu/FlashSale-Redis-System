@@ -10,6 +10,7 @@ import com.flashsale.payment.entity.PaymentOrder;
 import com.flashsale.payment.enums.OrderStatus;
 import com.flashsale.payment.enums.PaymentProviderType;
 import com.flashsale.payment.enums.PaymentStatus;
+import com.flashsale.payment.observability.BusinessMetrics;
 import com.flashsale.payment.provider.PaymentProvider;
 import com.flashsale.payment.provider.PaymentProviderResult;
 import com.flashsale.payment.service.IOrderService;
@@ -47,6 +48,9 @@ public class PaymentServiceImpl implements IPaymentService {
     @Resource
     private List<PaymentProvider> paymentProviders;
 
+    @Resource
+    private BusinessMetrics businessMetrics;
+
     private final Map<PaymentProviderType, PaymentProvider> providerMap =
             new EnumMap<>(PaymentProviderType.class);
 
@@ -61,13 +65,15 @@ public class PaymentServiceImpl implements IPaymentService {
     @Transactional
     public Result createPayment(Long orderId, Long userId, CreatePaymentRequest request) {
         if (orderId == null || userId == null) {
+            businessMetrics.recordPaymentCreateFailure("unknown", "invalid_arguments");
             return Result.fail("订单参数不完整");
         }
 
         Order order = orderService.getById(orderId);
-        Result validation = validateOrderForPayment(order, userId);
-        if (!Boolean.TRUE.equals(validation.getSuccess())) {
-            return validation;
+        PaymentValidation validation = validateOrderForPayment(order, userId);
+        if (!validation.success) {
+            businessMetrics.recordPaymentCreateFailure("unknown", validation.reason);
+            return validation.result;
         }
 
         PaymentOrder existing = paymentOrderService.query()
@@ -75,20 +81,25 @@ public class PaymentServiceImpl implements IPaymentService {
                 .one();
         if (existing != null) {
             if (isReusablePayment(existing)) {
+                businessMetrics.recordPaymentCreateReused(providerOf(existing));
                 return Result.ok(toCreatePaymentResponse(existing));
             }
             if (PaymentStatus.CREATED.name().equals(existing.getStatus())) {
+                businessMetrics.recordPaymentCreateFailure(providerOf(existing), "payment_creating");
                 return Result.fail("支付单创建中，请稍后重试");
             }
+            businessMetrics.recordPaymentCreateFailure(providerOf(existing), "payment_status_not_allowed");
             return Result.fail("当前支付单状态不允许继续支付");
         }
 
         PaymentProviderType providerType = resolveProviderType(request);
         if (providerType == null) {
+            businessMetrics.recordPaymentCreateFailure("unknown", "unsupported_provider");
             return Result.fail("不支持的支付渠道");
         }
         PaymentProvider provider = providerMap.get(providerType);
         if (provider == null) {
+            businessMetrics.recordPaymentCreateFailure(providerType.name(), "provider_unavailable");
             return Result.fail("支付渠道暂不可用");
         }
 
@@ -106,6 +117,7 @@ public class PaymentServiceImpl implements IPaymentService {
         try {
             boolean saved = paymentOrderService.save(paymentOrder);
             if (!saved) {
+                businessMetrics.recordPaymentCreateFailure(providerType.name(), "save_failed");
                 return Result.fail("创建支付单失败");
             }
         } catch (DuplicateKeyException e) {
@@ -113,11 +125,17 @@ public class PaymentServiceImpl implements IPaymentService {
                     .eq("order_id", orderId)
                     .one();
             if (duplicated != null && isReusablePayment(duplicated)) {
+                businessMetrics.recordPaymentCreateReused(providerOf(duplicated));
                 return Result.ok(toCreatePaymentResponse(duplicated));
             }
             if (duplicated != null && PaymentStatus.CREATED.name().equals(duplicated.getStatus())) {
+                businessMetrics.recordPaymentCreateFailure(providerOf(duplicated), "payment_creating");
                 return Result.fail("支付单创建中，请稍后重试");
             }
+            businessMetrics.recordPaymentCreateFailure(providerType.name(), "duplicate_unresolved");
+            throw e;
+        } catch (RuntimeException e) {
+            businessMetrics.recordPaymentCreateFailure(providerType.name(), "save_exception");
             throw e;
         }
 
@@ -130,6 +148,7 @@ public class PaymentServiceImpl implements IPaymentService {
             if (!updated) {
                 throw new IllegalStateException("更新支付单provider信息失败");
             }
+            businessMetrics.recordPaymentCreateSuccess(providerType.name());
             return Result.ok(toCreatePaymentResponse(paymentOrder));
         } catch (Exception e) {
             log.error("创建第三方支付失败，orderId={}, paymentOrderId={}, provider={}",
@@ -137,6 +156,7 @@ public class PaymentServiceImpl implements IPaymentService {
             paymentOrder.setStatus(PaymentStatus.FAILED.name());
             paymentOrder.setFailureReason(e.getClass().getSimpleName());
             paymentOrderService.updateById(paymentOrder);
+            businessMetrics.recordPaymentCreateFailure(providerType.name(), "provider_exception");
             return Result.fail("创建支付失败，请稍后重试");
         }
     }
@@ -168,26 +188,26 @@ public class PaymentServiceImpl implements IPaymentService {
         return Result.ok(response);
     }
 
-    private Result validateOrderForPayment(Order order, Long userId) {
+    private PaymentValidation validateOrderForPayment(Order order, Long userId) {
         if (order == null) {
-            return Result.fail("订单不存在");
+            return PaymentValidation.failure("order_not_found", "订单不存在");
         }
         if (!userId.equals(order.getUserId())) {
-            return Result.fail("无权支付该订单");
+            return PaymentValidation.failure("forbidden_order_owner", "无权支付该订单");
         }
         if (!Integer.valueOf(OrderStatus.PENDING_PAYMENT.getCode()).equals(order.getStatus())) {
-            return Result.fail("订单状态不允许支付");
+            return PaymentValidation.failure("invalid_order_status", "订单状态不允许支付");
         }
         if (order.getExpireTime() != null && order.getExpireTime().isBefore(LocalDateTime.now())) {
-            return Result.fail("订单已超时，请等待系统取消");
+            return PaymentValidation.failure("order_expired", "订单已超时，请等待系统取消");
         }
         if (order.getPayAmount() == null || order.getPayAmount() <= 0) {
-            return Result.fail("订单金额异常");
+            return PaymentValidation.failure("invalid_amount", "订单金额异常");
         }
         if (order.getCurrency() == null || order.getCurrency().isBlank()) {
-            return Result.fail("订单币种异常");
+            return PaymentValidation.failure("invalid_currency", "订单币种异常");
         }
-        return Result.ok();
+        return PaymentValidation.success();
     }
 
     private PaymentProviderType resolveProviderType(CreatePaymentRequest request) {
@@ -202,6 +222,13 @@ public class PaymentServiceImpl implements IPaymentService {
                 || PaymentStatus.PAID.name().equals(paymentOrder.getStatus());
     }
 
+    private String providerOf(PaymentOrder paymentOrder) {
+        if (paymentOrder == null || paymentOrder.getProvider() == null || paymentOrder.getProvider().isBlank()) {
+            return "unknown";
+        }
+        return paymentOrder.getProvider();
+    }
+
     private CreatePaymentResponse toCreatePaymentResponse(PaymentOrder paymentOrder) {
         return new CreatePaymentResponse(
                 paymentOrder.getId(),
@@ -213,5 +240,25 @@ public class PaymentServiceImpl implements IPaymentService {
                 paymentOrder.getStatus(),
                 paymentOrder.getCheckoutUrl()
         );
+    }
+
+    private static class PaymentValidation {
+        private final boolean success;
+        private final String reason;
+        private final Result result;
+
+        private PaymentValidation(boolean success, String reason, Result result) {
+            this.success = success;
+            this.reason = reason;
+            this.result = result;
+        }
+
+        private static PaymentValidation success() {
+            return new PaymentValidation(true, null, Result.ok());
+        }
+
+        private static PaymentValidation failure(String reason, String message) {
+            return new PaymentValidation(false, reason, Result.fail(message));
+        }
     }
 }

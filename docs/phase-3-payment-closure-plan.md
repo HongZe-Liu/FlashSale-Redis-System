@@ -806,6 +806,7 @@ orders 状态机
 - 不能信任前端传入的金额、币种、用户 id。
 - 支付成功不能以客户端跳转为准，必须以后端 webhook 为准。
 - webhook 可能重复到达，必须做幂等。
+- 只有已经处理成功的重复 webhook 才能按成功返回；已失败或仍在处理中的重复事件不能伪装成成功。
 - Mock webhook 只能用于本地或测试环境，不能在生产环境裸露。
 - 订单和支付单状态要通过条件更新保护，避免并发下乱跳状态。
 - 支付成功和订单成功必须在事务里一起更新。
@@ -820,7 +821,8 @@ orders 状态机
 秒杀成功后生成 PENDING_PAYMENT 订单。
 用户可以对 PENDING_PAYMENT 订单创建 Mock 支付单。
 Mock webhook 可以把订单和支付单更新为 PAID。
-重复 webhook 不会重复处理。
+重复成功 webhook 不会重复处理。
+重复失败 webhook 不会被伪装成成功。
 金额或币种不匹配的 webhook 不会更新订单。
 超时未支付订单会自动 EXPIRED。
 EXPIRED 后 MySQL 库存和 Redis 库存会补偿。

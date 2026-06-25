@@ -144,6 +144,9 @@ MOCK_WEBHOOK_SECRET
 
 ## Local Acceptance Flow
 
+For the lightweight manual payment acceptance checklist, see
+[`docs/payment-acceptance-test.md`](docs/payment-acceptance-test.md).
+
 1. Import `src/main/resources/db/hmdp.sql` into the `FlashSalePaymentApplication` schema.
 2. Start MySQL, Redis, and RabbitMQ locally.
 3. Start the application with the `local` profile.
@@ -234,6 +237,30 @@ Mock webhooks are intended for `local` and `test` profiles. In other environment
 
 If a `PENDING_PAYMENT` order passes `expire_time`, the scheduled timeout task marks it as `EXPIRED`, marks any pending payment order as `EXPIRED`, restores MySQL stock, and restores Redis stock when the Redis stock key still exists. The first implementation keeps the one-user-one-order qualification, so the same user still cannot re-buy the same offer after expiration.
 
+## Observability
+
+The application exposes Spring Boot Actuator and Prometheus metrics.
+
+Local profile endpoints:
+
+```text
+GET /actuator/health
+GET /actuator/info
+GET /actuator/metrics
+GET /actuator/prometheus
+```
+
+Default or production-like configuration only exposes `health` and `prometheus`; production access should still be restricted by network policy, gateway rules, or Spring Security configuration.
+
+Use the local Prometheus scrape config at:
+
+```text
+infra/prometheus/prometheus.yml
+```
+
+For the manual observability checklist, see
+[`docs/observability-acceptance-test.md`](docs/observability-acceptance-test.md).
+
 ## Refactor Roadmap
 
 1. Project boundary cleanup
@@ -258,6 +285,7 @@ If a `PENDING_PAYMENT` order passes `expire_time`, the scheduled timeout task ma
 4. Observability
    - Add Spring Boot Actuator and Micrometer
    - Export Prometheus metrics
+   - See [`docs/phase-4-observability-plan.md`](docs/phase-4-observability-plan.md)
    - Build Grafana dashboards for login, flash sale, MQ, order, and payment paths
 
 5. Production readiness

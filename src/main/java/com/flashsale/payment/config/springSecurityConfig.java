@@ -2,6 +2,8 @@ package com.flashsale.payment.config;
 
 import com.flashsale.payment.filter.AuthFilter;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -16,9 +18,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class springSecurityConfig extends WebSecurityConfigurerAdapter {
 
     private final AuthFilter authFilter;
+    private final Environment environment;
 
-    public springSecurityConfig(AuthFilter authFilter) {
+    public springSecurityConfig(AuthFilter authFilter, Environment environment) {
         this.authFilter = authFilter;
+        this.environment = environment;
     }
 
     @Override
@@ -38,6 +42,7 @@ public class springSecurityConfig extends WebSecurityConfigurerAdapter {
                         "/user/refresh",
                         "/payments/webhooks/mock"
                 ).permitAll()
+                .antMatchers(publicActuatorEndpoints()).permitAll()
                 .anyRequest().authenticated()
                 .and()
                 .exceptionHandling()
@@ -52,5 +57,23 @@ public class springSecurityConfig extends WebSecurityConfigurerAdapter {
                     res.getWriter().write("{\"msg\":\"无权限\"}");
                 });
         http.addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
+    }
+
+    private String[] publicActuatorEndpoints() {
+        if (environment.acceptsProfiles(Profiles.of("local", "test"))) {
+            return new String[]{
+                    "/actuator/health",
+                    "/actuator/health/**",
+                    "/actuator/info",
+                    "/actuator/metrics",
+                    "/actuator/metrics/**",
+                    "/actuator/prometheus"
+            };
+        }
+        return new String[]{
+                "/actuator/health",
+                "/actuator/health/**",
+                "/actuator/prometheus"
+        };
     }
 }

@@ -1,5 +1,14 @@
 # 本地环境
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
 spring:
   datasource:
     url: jdbc:mysql://localhost:3306/FlashSalePaymentApplication?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true

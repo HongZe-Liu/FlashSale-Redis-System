@@ -3,6 +3,7 @@ package com.flashsale.payment.mq;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flashsale.payment.config.RabbitMqConfig;
 import com.flashsale.payment.entity.Order;
+import com.flashsale.payment.observability.BusinessMetrics;
 import com.flashsale.payment.service.IOrderService;
 import com.flashsale.payment.service.RedisReservationCompensationService;
 import com.rabbitmq.client.Channel;
@@ -39,6 +40,8 @@ public class FlashSaleOrderConsumer {
     private static final String ERROR_REASON_HEADER = "flashsale-error-reason";
     private static final int MAX_RETRY_COUNT = 3;
     private static final long PUBLISH_CONFIRM_TIMEOUT_MS = 5000L;
+    private static final String DESTINATION_RETRY = "retry";
+    private static final String DESTINATION_DEAD_LETTER = "dead_letter";
 
     @Resource
     private ObjectMapper objectMapper;
@@ -58,6 +61,9 @@ public class FlashSaleOrderConsumer {
     @Resource
     private RedisReservationCompensationService redisReservationCompensationService;
 
+    @Resource
+    private BusinessMetrics businessMetrics;
+
     @RabbitListener(queues = RabbitMqConfig.ORDER_CREATE_QUEUE)
     public void consume(Message amqpMessage, Channel channel) throws IOException {
         long deliveryTag = amqpMessage.getMessageProperties().getDeliveryTag();
@@ -66,11 +72,13 @@ public class FlashSaleOrderConsumer {
             message = objectMapper.readValue(amqpMessage.getBody(), FlashSaleOrderMessage.class);
             ConsumeDecision decision = handleOrderMessage(message);
             if (decision.status == ConsumeStatus.SUCCESS) {
+                businessMetrics.recordMqConsumeSuccess();
                 channel.basicAck(deliveryTag, false);
                 return;
             }
 
             if (decision.status == ConsumeStatus.DEAD_LETTER) {
+                businessMetrics.recordMqConsumeFailure(decision.reason);
                 publishDeadLetterAndAck(message, amqpMessage, channel, deliveryTag, decision.reason,
                         retryCount(amqpMessage));
                 return;
@@ -79,15 +87,17 @@ public class FlashSaleOrderConsumer {
             publishRetryOrDeadLetter(message, amqpMessage, channel, deliveryTag, decision.reason);
         } catch (Exception e) {
             if (message == null) {
+                String reason = "message_convert_error";
                 log.error("RabbitMQ秒杀订单消息格式异常，将进入DLQ，body={}",
                         originalMessageBody(amqpMessage), e);
+                businessMetrics.recordMqConsumeFailure(reason);
                 publishDeadLetterAndAck(null, amqpMessage, channel, deliveryTag,
-                        "message_convert_error:" + e.getClass().getSimpleName(), retryCount(amqpMessage));
+                        reason, retryCount(amqpMessage));
                 return;
             }
             log.error("RabbitMQ秒杀订单消费出现未预期异常，message={}", message, e);
             publishRetryOrDeadLetter(message, amqpMessage, channel, deliveryTag,
-                    "unexpected_consume_exception:" + e.getClass().getSimpleName());
+                    "unexpected_consume_exception");
         }
     }
 
@@ -136,16 +146,19 @@ public class FlashSaleOrderConsumer {
         } catch (DuplicateKeyException e) {
             log.warn("订单唯一索引冲突，按幂等成功处理，userId={}, offerId={}, orderId={}",
                     userId, offerId, orderId);
+            businessMetrics.recordOrderCreateIdempotent();
             return ConsumeDecision.success();
         } catch (Exception e) {
             if (isDuplicateOrderException(e)) {
                 log.warn("订单唯一索引冲突，按幂等成功处理，userId={}, offerId={}, orderId={}",
                         userId, offerId, orderId);
+                businessMetrics.recordOrderCreateIdempotent();
                 return ConsumeDecision.success();
             }
             log.error("订单落库异常，将投递到重试队列，userId={}, offerId={}, orderId={}",
                     userId, offerId, orderId, e);
-            return ConsumeDecision.retry("create_order_exception:" + e.getClass().getSimpleName());
+            businessMetrics.recordOrderCreateFailure("create_order_exception");
+            return ConsumeDecision.retry("create_order_exception");
         } finally {
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
@@ -155,6 +168,7 @@ public class FlashSaleOrderConsumer {
 
     private void publishRetryOrDeadLetter(FlashSaleOrderMessage message, Message amqpMessage,
                                           Channel channel, long deliveryTag, String reason) throws IOException {
+        businessMetrics.recordMqConsumeFailure(reason);
         int nextRetryCount = retryCount(amqpMessage) + 1;
         if (nextRetryCount >= MAX_RETRY_COUNT) {
             log.error("RabbitMQ秒杀订单消息消费失败超过重试上限，将进入DLQ，retryCount={}, reason={}, message={}",
@@ -172,7 +186,8 @@ public class FlashSaleOrderConsumer {
                     messagePostProcessor.getMessageProperties().setHeader(ERROR_REASON_HEADER, reason);
                     return messagePostProcessor;
                 },
-                "retry-" + message.getOrderId() + "-" + nextRetryCount
+                "retry-" + message.getOrderId() + "-" + nextRetryCount,
+                DESTINATION_RETRY
         );
 
         if (published) {
@@ -208,10 +223,12 @@ public class FlashSaleOrderConsumer {
                     messagePostProcessor.getMessageProperties().setHeader(ERROR_REASON_HEADER, reason);
                     return messagePostProcessor;
                 },
-                "dead-" + UUID.randomUUID()
+                "dead-" + UUID.randomUUID(),
+                DESTINATION_DEAD_LETTER
         );
 
         if (published) {
+            businessMetrics.recordMqDeadLetter(reason);
             if (message != null) {
                 redisReservationCompensationService.compensate(
                         message.getOfferId(),
@@ -231,7 +248,7 @@ public class FlashSaleOrderConsumer {
 
     private boolean publishWithConfirm(String exchange, String routingKey, Object payload,
                                        org.springframework.amqp.core.MessagePostProcessor postProcessor,
-                                       String correlationId) {
+                                       String correlationId, String destination) {
         CorrelationData correlationData = new CorrelationData(correlationId);
         try {
             rabbitTemplate.convertAndSend(exchange, routingKey, payload, postProcessor, correlationData);
@@ -240,25 +257,31 @@ public class FlashSaleOrderConsumer {
             if (!confirm.isAck()) {
                 log.error("RabbitMQ消息转发未确认，exchange={}, routingKey={}, correlationId={}, reason={}, payload={}",
                         exchange, routingKey, correlationId, confirm.getReason(), payload);
+                businessMetrics.recordMqPublishFailure(destination, "confirm_nack");
                 return false;
             }
             if (correlationData.getReturnedMessage() != null) {
                 log.error("RabbitMQ消息转发不可路由，exchange={}, routingKey={}, correlationId={}, payload={}",
                         exchange, routingKey, correlationId, payload);
+                businessMetrics.recordMqPublishFailure(destination, "returned");
                 return false;
             }
+            businessMetrics.recordMqPublishSuccess(destination);
             return true;
         } catch (TimeoutException e) {
             log.error("RabbitMQ消息转发确认超时，exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
+            businessMetrics.recordMqPublishFailure(destination, "confirm_timeout");
             return false;
         } catch (AmqpException e) {
             log.error("RabbitMQ消息转发异常，exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
+            businessMetrics.recordMqPublishFailure(destination, "amqp_exception");
             return false;
         } catch (Exception e) {
             log.error("RabbitMQ消息转发出现未预期异常，exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
+            businessMetrics.recordMqPublishFailure(destination, "unexpected_exception");
             return false;
         }
     }
