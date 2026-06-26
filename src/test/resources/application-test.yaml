@@ -1,0 +1,15 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+app:
+  payment:
+    provider: MOCK
+    order-expire-minutes: 15
+    timeout-scan-fixed-delay-ms: 60000
+    timeout-scan-batch-size: 100
+    mock-webhook-secret: test-secret
