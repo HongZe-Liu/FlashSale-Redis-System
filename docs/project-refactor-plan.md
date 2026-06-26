@@ -1,4 +1,4 @@
-# Flash Sale Payment 项目改造计划
+# Flash Sale Platform 项目改造计划
 
 ## 1. 项目新定位
 
@@ -153,13 +153,13 @@ upload
 
 ```text
 已完成：
-- 项目定位已收缩为 flash-sale-payment。
+- 项目定位已收缩为 flash-sale-platform。
 - 旧点评类主链路已弱化，当前核心保留登录、商家、优惠、秒杀订单。
 - 用户登录支持 email 验证码、JWT access token、refresh token。
 - 数据库表已收敛为 tb_user / merchants / offers / flash_sale_offers / orders 等核心表。
 - 秒杀活动支持管理员发布，发布时从 MySQL 预热 Redis。
 - 秒杀下单支持 Redis Lua 原子裁决、Redis Stream 异步落库、一人一单和库存扣减。
-- local profile 已指向 FlashSalePaymentApplication schema。
+- local profile 已指向 flash_sale_platform schema。
 - 商家详情接口返回结构已修正为单层 Result。
 - Redis Stream 消费线程已支持应用关闭时优雅退出。
 ```

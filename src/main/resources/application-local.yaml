@@ -11,7 +11,7 @@ management:
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/FlashSalePaymentApplication?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/flash_sale_platform?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
     password: ""
   redis:

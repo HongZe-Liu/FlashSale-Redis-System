@@ -35,7 +35,7 @@ JWT_SECRET=dev-only-change-me-dev-only-change-me-32bytes \
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local"
 ```
 
-如果本地库名不是 `FlashSalePaymentApplication`，可以通过环境变量或启动参数覆盖数据源。
+如果本地库名不是 `flash_sale_platform`，可以通过环境变量或启动参数覆盖数据源。
 
 示例：
 

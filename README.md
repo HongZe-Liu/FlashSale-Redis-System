@@ -1,6 +1,6 @@
-# Flash Sale Payment Backend
+# Flash Sale Platform Backend
 
-High-concurrency flash sale and payment backend built with Spring Boot, Redis, RabbitMQ, and MySQL.
+High-concurrency flash sale platform backend built with Spring Boot, Redis, RabbitMQ, and MySQL.
 
 This project is being refactored from a general coupon and shop demo into a focused backend portfolio project. The target scope is a realistic transaction system: authentication, flash-sale admission control, asynchronous order creation, payment workflow, idempotency, compensation, and observability.
 
@@ -105,7 +105,7 @@ flowchart LR
 
 ## Local Build
 
-The local profile uses Java 11 and the MySQL schema `FlashSalePaymentApplication`.
+The local profile uses Java 11 and the MySQL schema `flash_sale_platform`.
 
 Use the Maven Wrapper included in the repository:
 
@@ -119,6 +119,41 @@ Run the application with the local profile:
 JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-11.jdk/Contents/Home \
 JWT_SECRET=dev-only-change-me-dev-only-change-me-32bytes \
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local"
+```
+
+## Docker Demo
+
+Start the full local demo stack with Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+This starts the Spring Boot app, MySQL, Redis, RabbitMQ, and Prometheus. MySQL initializes the `flash_sale_platform` schema from `src/main/resources/db/flash_sale_platform.sql` the first time its Docker volume is created.
+
+Useful local URLs:
+
+```text
+API: http://localhost:8080
+Health: http://localhost:8080/actuator/health
+RabbitMQ: http://localhost:15672
+Prometheus: http://localhost:9090
+```
+
+Default RabbitMQ credentials are `flash_sale` / `flash_sale`.
+
+To override ports or local demo credentials, copy `.env.example` to `.env` and edit it before starting Compose:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Reset all local container data, including the MySQL seed data:
+
+```bash
+docker compose down -v
+docker compose up -d --build
 ```
 
 Important configuration can be supplied through environment variables:
@@ -147,7 +182,7 @@ MOCK_WEBHOOK_SECRET
 For the lightweight manual payment acceptance checklist, see
 [`docs/payment-acceptance-test.md`](docs/payment-acceptance-test.md).
 
-1. Import `src/main/resources/db/hmdp.sql` into the `FlashSalePaymentApplication` schema.
+1. Import `src/main/resources/db/flash_sale_platform.sql` into the `flash_sale_platform` schema.
 2. Start MySQL, Redis, and RabbitMQ locally.
 3. Start the application with the `local` profile.
 4. Login as the seeded admin user `admin@flashsale.dev`.

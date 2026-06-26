@@ -1,0 +1,18 @@
+package com.flashsale.platform.provider;
+
+import com.flashsale.platform.enums.PaymentStatus;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class PaymentProviderResult {
+
+    private String providerPaymentId;
+
+    private String checkoutUrl;
+
+    private PaymentStatus status;
+}

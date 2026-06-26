@@ -27,7 +27,7 @@
 当前项目已有：
 
 ```text
-src/test/java/com/flashsale/payment/FlashSalePaymentApplicationTests.java
+src/test/java/com/flashsale/platform/FlashSalePlatformApplicationTests.java
 ```
 
 但该测试类没有真实断言，也没有隔离外部依赖。
@@ -481,7 +481,7 @@ Mapper / Service 插入
 新增 Testcontainers 依赖。
 配置 surefire / failsafe。
 新增 application-test.yaml。
-删除或改造空的 FlashSalePaymentApplicationTests。
+删除或改造空的 FlashSalePlatformApplicationTests。
 ```
 
 验收：
@@ -672,7 +672,7 @@ spring-security-test 使用 Spring Boot 依赖管理版本。
 当前已有：
 
 ```text
-src/main/resources/db/hmdp.sql
+src/main/resources/db/flash_sale_platform.sql
 ```
 
 后续需要确认：
@@ -720,6 +720,7 @@ RabbitMQ 重试、死信和补偿使用真实 RabbitMQ 验证。
 PaymentServiceImplTest
 PaymentWebhookServiceImplTest
 OrderTimeoutServiceTest
+RedisReservationCompensationServiceTest
 PaymentControllerTest
 PaymentWebhookControllerTest
 ```
@@ -746,7 +747,7 @@ FlashSaleOrderConsumerTest
 
 ```text
 ./mvnw test
-  通过，43 个快速测试全部成功。
+  通过，60 个快速测试全部成功。
 
 ./mvnw verify -Pintegration
   当前执行环境缺少 Docker，Testcontainers 无法启动容器。

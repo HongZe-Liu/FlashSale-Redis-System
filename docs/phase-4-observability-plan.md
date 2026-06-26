@@ -338,7 +338,7 @@ noop: 用户资格已经不存在、无需补偿等非错误场景。
 新增统一业务指标组件：
 
 ```text
-com.flashsale.payment.observability.BusinessMetrics
+com.flashsale.platform.observability.BusinessMetrics
 ```
 
 职责：
@@ -462,7 +462,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: "flash-sale-payment"
+  - job_name: "flash-sale-platform"
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets: ["host.docker.internal:8080"]
@@ -493,7 +493,7 @@ JVM and database pool
 后续如果要增强，可以新增：
 
 ```text
-infra/grafana/dashboards/flash-sale-payment.json
+infra/grafana/dashboards/flash-sale-platform.json
 ```
 
 ## 13. 分阶段实施计划

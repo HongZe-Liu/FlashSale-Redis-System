@@ -412,7 +412,7 @@ Authorization: Bearer <access-token>
 建议新增包：
 
 ```text
-com.flashsale.payment.payment
+com.flashsale.platform.payment
 ```
 
 第一版可以细分：

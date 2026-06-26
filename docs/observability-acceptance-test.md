@@ -152,4 +152,4 @@ When Prometheus runs directly on the host, change the target to:
 localhost:8080
 ```
 
-Prometheus should show the `flash-sale-payment` target as `UP`.
+Prometheus should show the `flash-sale-platform` target as `UP`.

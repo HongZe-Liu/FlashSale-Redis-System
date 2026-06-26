@@ -2,7 +2,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: "flash-sale-payment"
+  - job_name: "flash-sale-platform"
     metrics_path: "/actuator/prometheus"
     static_configs:
-      - targets: ["host.docker.internal:8080"]
+      - targets: ["app:8080"]
