@@ -70,7 +70,7 @@ class PaymentControllerTest {
                         .content("{\"provider\":\"MOCK\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.errorMsg").value("用户未登录"));
+                .andExpect(jsonPath("$.errorMsg").value("User is not authenticated"));
     }
 
     @Test

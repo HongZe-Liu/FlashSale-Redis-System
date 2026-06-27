@@ -1,10 +1,53 @@
 # Flash Sale Platform
 
-Production-oriented flash sale and payment backend built with Spring Boot, Redis, RabbitMQ, MySQL, and Docker.
+Production-oriented flash-sale and payment backend built with Spring Boot, Redis, RabbitMQ, MySQL, and Docker.
 
-This project models the core transaction path of a high-concurrency local commerce platform: users compete for limited-time offers, the system performs atomic admission control in Redis, order creation is decoupled through RabbitMQ, and payment state is handled with idempotent webhook processing and stock compensation.
+This portfolio project models the core transaction path of a high-concurrency local commerce platform: users compete for limited-time offers, Redis performs atomic admission control, RabbitMQ decouples order creation, MySQL remains the durable source of truth, and payment state is handled through an idempotent provider abstraction.
 
-The domain is intentionally shaped around a Belgium/EU portfolio context: EUR-denominated offers, local merchants, and a payment abstraction that can be extended toward providers such as Stripe and Bancontact.
+The project is intentionally shaped around a Belgium/EU commerce context: EUR-denominated offers, local merchants, and a payment abstraction that can be extended toward providers such as Stripe or Bancontact.
+
+## What This Demonstrates
+
+- High-concurrency flash-sale admission with Redis Lua.
+- Asynchronous order creation through RabbitMQ with publisher confirms, mandatory returns, manual acknowledgements, retry queue, and dead-letter queue.
+- Final consistency safeguards with MySQL conditional stock deduction and a unique `(user_id, offer_id)` order constraint.
+- Idempotent Redis stock/reservation compensation when asynchronous processing fails after pre-deduction.
+- Payment order lifecycle with amount/currency snapshots and idempotent webhook event processing.
+- Redis-backed JWT session state with refresh-token rotation and reuse detection.
+- Observability through Spring Boot Actuator, Micrometer, and Prometheus.
+- Reproducible k6 load testing with synthetic users and post-test Redis/MySQL/RabbitMQ consistency verification.
+
+## Verified Load Test
+
+The project includes a runnable load-test workflow under `load-tests/`. The main local baseline validates the flash-sale path under concurrent demand:
+
+```text
+5,000 synthetic users compete for 100 units of stock.
+Expected result: exactly 100 orders, no duplicate user orders, no overselling, empty DLQ.
+```
+
+Recorded local result:
+
+| Metric | Result |
+| --- | ---: |
+| Accepted orders | `100` |
+| Stock rejections | `4,900` |
+| Duplicate rejections | `0` |
+| Other business rejections | `0` |
+| HTTP failure rate | `0%` |
+| HTTP p95 latency | `266.21 ms` |
+| HTTP p99 latency | `361.36 ms` |
+| RabbitMQ create/retry/DLQ depth after drain | `0 / 0 / 0` |
+| Final consistency check | PASS |
+
+Final verification output:
+
+```text
+orders=100 duplicateUsers=0 dbStock=0 redisStock=0 redisReservations=100 createQueue=0 retryQueue=0 dlq=0
+Load-test verification passed.
+```
+
+See the full report in `docs/load-test-report-local.md`.
 
 ## Architecture
 
@@ -24,34 +67,37 @@ flowchart LR
     Metrics --> Prometheus["Prometheus"]
 ```
 
-The design separates fast admission control from final transactional persistence. Redis handles the hot path for stock pre-deduction and one-user-one-order checks, while MySQL remains the source of truth for durable order and payment state.
+Redis is used as the fast admission layer, not as the final source of truth. MySQL remains responsible for durable orders, payment state, stock reconciliation, and final uniqueness guarantees.
 
-## Core Transaction Flow
+## Core Flow
 
 ```text
 Login
   -> publish flash-sale offer
-  -> Redis Lua stock and duplicate-order check
-  -> Redis reservation
-  -> RabbitMQ order message
-  -> MySQL order creation
-  -> payment order creation
-  -> provider webhook
-  -> paid order or timeout compensation
+  -> Redis Lua validates time window, stock, and duplicate user reservation
+  -> Redis pre-deducts stock and records user reservation
+  -> RabbitMQ receives order command
+  -> consumer creates MySQL order transactionally
+  -> payment order is created
+  -> provider webhook marks payment success
+  -> unpaid orders expire and stock is compensated
 ```
 
-## Engineering Highlights
+## Consistency Design
 
-- Atomic flash-sale admission with Redis Lua for stock pre-deduction, sale-time validation, and one-user-one-order enforcement.
-- RabbitMQ-based asynchronous order creation with publisher confirms, mandatory returns, manual acknowledgements, retry queue, and dead-letter queue.
-- Idempotent Redis reservation compensation when message publishing or final order consumption fails after Redis pre-deduction.
-- MySQL uniqueness and conditional stock updates as final consistency safeguards against duplicate orders and overselling.
-- Payment order state model with amount and currency snapshots.
-- Idempotent mock payment webhook flow with provider event records and duplicate-event handling.
-- Scheduled timeout cancellation for unpaid orders with MySQL and Redis stock compensation.
-- Spring Security authentication filter with JWT access tokens and Redis-backed refresh/session state.
-- Actuator and Micrometer metrics exported to Prometheus.
-- Docker Compose demo stack for local review and reproducible project evaluation.
+The flash-sale path uses layered safeguards:
+
+| Layer | Responsibility |
+| --- | --- |
+| Redis Lua | Atomic sale-window check, stock check, stock pre-deduction, one-user-one-order reservation |
+| RabbitMQ publisher confirms/returns | Detect failed or unroutable order messages after Redis admission |
+| Redis compensation Lua | Restore stock and remove reservation when publish or final processing fails |
+| RabbitMQ retry and DLQ | Preserve failed asynchronous work for retry or inspection |
+| MySQL conditional stock update | Final durable stock deduction guard |
+| MySQL unique order index | Final duplicate-order guard |
+| Payment webhook event table | Idempotent provider-event processing |
+
+More details are documented in `docs/reliability-and-consistency.md`.
 
 ## Tech Stack
 
@@ -64,12 +110,12 @@ Login
 | Cache and concurrency | Redis, Redis Lua, Redisson |
 | Messaging | RabbitMQ |
 | Observability | Spring Boot Actuator, Micrometer, Prometheus |
-| Build and runtime | Maven Wrapper, Docker, Docker Compose |
-| Testing | JUnit 5, Mockito, Spring MVC Test, Testcontainers |
+| Build/runtime | Maven Wrapper, Docker, Docker Compose |
+| Testing | JUnit 5, Mockito, Spring MVC Test, Testcontainers, k6 |
 
 ## Quick Start
 
-The fastest way to review the project is the Docker Compose demo stack.
+The fastest review path is the Docker Compose demo stack:
 
 ```bash
 docker compose up -d --build
@@ -99,20 +145,14 @@ username: flash_sale
 password: flash_sale
 ```
 
-The MySQL schema is initialized from:
-
-```text
-src/main/resources/db/flash_sale_platform.sql
-```
-
-To reset all local container state:
+Reset all local container state:
 
 ```bash
 docker compose down -v
 docker compose up -d --build
 ```
 
-To override local ports or demo credentials:
+Override local ports or demo credentials:
 
 ```bash
 cp .env.example .env
@@ -121,13 +161,13 @@ docker compose up -d --build
 
 ## Local Development
 
-Run fast tests:
+Run the fast test suite:
 
 ```bash
 ./mvnw test
 ```
 
-Run the application against local infrastructure:
+Run the application against locally installed MySQL, Redis, and RabbitMQ:
 
 ```bash
 JWT_SECRET=dev-only-change-me-dev-only-change-me-32bytes \
@@ -160,6 +200,97 @@ GMAIL_FROM
 GMAIL_APP_PASS
 ```
 
+## Testing
+
+Fast unit/controller/service tests:
+
+```bash
+./mvnw test
+```
+
+Integration tests use the Maven `integration` profile and Testcontainers-backed infrastructure:
+
+```bash
+./mvnw verify -Pintegration
+```
+
+Current test coverage focuses on:
+
+- Payment service state transitions.
+- Payment webhook idempotency and failure paths.
+- Payment and webhook controllers.
+- RabbitMQ order consumer behavior.
+- Unpaid order timeout cancellation and stock compensation.
+- Redis reservation compensation service.
+- MySQL, Redis, and RabbitMQ integration boundaries.
+
+## Load Testing
+
+Install k6 if needed:
+
+```bash
+brew install k6
+```
+
+Prepare baseline data and sessions:
+
+```bash
+USERS=5000 STOCK=100 node load-tests/scripts/prepare-load-data.mjs
+```
+
+Run the baseline k6 scenario:
+
+```bash
+k6 run \
+  -e BASE_URL=http://localhost:8080 \
+  -e OFFER_ID=900001 \
+  -e TOKEN_FILE=load-tests/out/tokens.json \
+  -e VUS=300 \
+  -e ITERATIONS=5000 \
+  -e MAX_DURATION=2m \
+  load-tests/k6/flash-sale-order.js
+```
+
+Verify final consistency:
+
+```bash
+USERS=5000 STOCK=100 EXPECTED_ACCEPTED=100 node load-tests/scripts/verify-load-result.mjs
+```
+
+For locally installed infrastructure without Docker, add `LOAD_TEST_INFRA=local` to the preparation and verification commands.
+
+More detail:
+
+- `load-tests/README.md` explains the runnable scripts.
+- `docs/performance-testing.md` describes strategy and acceptance criteria.
+- `docs/load-test-report-local.md` records local smoke and baseline results.
+- `docs/reliability-and-consistency.md` explains the consistency safeguards.
+
+## Observability
+
+The application exposes:
+
+```text
+GET /actuator/health
+GET /actuator/prometheus
+```
+
+Business metrics cover:
+
+- Authentication success/failure.
+- Flash-sale request outcomes.
+- RabbitMQ publish/consume outcomes.
+- Order creation outcomes.
+- Payment creation outcomes.
+- Webhook success/failure/duplicate handling.
+- Redis reservation compensation.
+
+Prometheus is included in the local Compose stack and scrapes:
+
+```text
+app:8080/actuator/prometheus
+```
+
 ## API Surface
 
 | Area | Endpoint | Purpose |
@@ -181,66 +312,6 @@ GMAIL_APP_PASS
 | Payment | `GET /payments/orders/{orderId}` | Query order/payment status |
 | Webhook | `POST /payments/webhooks/mock` | Simulate provider payment success |
 
-## Consistency Design
-
-Redis is used as the high-throughput admission layer, not as the final source of truth.
-
-When a flash-sale request arrives, Lua performs stock validation, duplicate-order validation, sale-window validation, stock pre-deduction, and user reservation atomically in Redis. After that, the application publishes an order command to RabbitMQ.
-
-Redis reservation and RabbitMQ publishing are not a single distributed transaction, so the producer uses publisher confirms and mandatory returns. If publishing clearly fails after Redis reservation, an idempotent Lua compensation script restores the stock and removes the user reservation.
-
-The consumer uses manual acknowledgements and processes messages inside a MySQL transaction. If order creation fails, the message is routed through retry and dead-letter queues. MySQL unique constraints and conditional stock deduction remain the final safeguards against duplicate orders and overselling.
-
-Payment webhooks are handled idempotently through provider event records. Duplicate processed events return success without mutating the business state again; failed or in-progress duplicates are surfaced explicitly.
-
-## Observability
-
-The application exposes:
-
-```text
-GET /actuator/health
-GET /actuator/prometheus
-```
-
-Metrics cover the main business paths:
-
-- authentication success/failure
-- flash-sale request outcomes
-- RabbitMQ publish/consume outcomes
-- order creation outcomes
-- payment creation outcomes
-- webhook success/failure/duplicate handling
-- Redis reservation compensation
-
-Prometheus is included in the local Compose stack and scrapes:
-
-```text
-app:8080/actuator/prometheus
-```
-
-## Testing
-
-Fast test suite:
-
-```bash
-./mvnw test
-```
-
-Current coverage focuses on:
-
-- payment service state transitions
-- payment webhook idempotency and failure paths
-- payment/webhook controllers
-- RabbitMQ order consumer behavior
-- unpaid order timeout cancellation and stock compensation
-- Redis reservation compensation service
-
-Integration tests are available behind the Maven `integration` profile and use Testcontainers for MySQL, Redis, and RabbitMQ-oriented scenarios:
-
-```bash
-./mvnw verify -Pintegration
-```
-
 ## Project Structure
 
 ```text
@@ -260,16 +331,20 @@ src/main/resources
   mapper/          MyBatis XML mappers
   *.lua            Redis Lua scripts for flash-sale and compensation flows
 
+load-tests/        k6 scripts, load-data setup, and final consistency checks
+docs/              Performance testing and reliability documentation
 infra/prometheus   Local Prometheus scrape configuration
 ```
 
 ## Current Limitations
 
 - The payment provider is currently a mock provider for local validation; the abstraction is ready for a real provider integration such as Stripe or Bancontact.
-- Redis runs without a password in the local Docker demo because Redisson password support is intentionally kept out of the demo setup.
-- The Compose stack is designed for local review, not as a hardened production deployment.
+- Redis runs without a password in the local Docker demo because the Compose stack is optimized for reproducible local review.
+- The Compose stack is a local demo and is not a hardened production deployment.
 - Grafana dashboards are not included yet; Prometheus metrics are exposed and ready to be visualized.
 
 ## Portfolio Positioning
 
-This project is intended to demonstrate backend engineering depth around transaction correctness, concurrency control, asynchronous processing, idempotency, and operational visibility. The implementation favors explicit consistency boundaries and observable failure handling over a minimal CRUD-style demo.
+This project is intended to demonstrate backend engineering depth around transaction correctness, concurrency control, asynchronous processing, idempotency, performance validation, and operational visibility.
+
+The implementation favors explicit consistency boundaries, reproducible load testing, and observable failure handling over a minimal CRUD-style demo.

@@ -45,7 +45,7 @@ INSERT INTO `merchants` (`id`, `name`, `status`, `create_time`, `update_time`) V
 DROP TABLE IF EXISTS `tb_user`;
 CREATE TABLE `tb_user`  (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
-  `phone` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'email account',
+  `email` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'email account',
   `password` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT 'reserved password hash',
   `nick_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT 'display name',
   `icon` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT 'avatar url',
@@ -54,15 +54,15 @@ CREATE TABLE `tb_user`  (
   `role` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'USER' COMMENT 'USER or ADMIN',
   `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE or DISABLED',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uniq_user_email`(`phone`) USING BTREE
+  UNIQUE INDEX `uniq_user_email`(`email`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 100 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
 
 -- ----------------------------
 -- Records of tb_user
 -- ----------------------------
-INSERT INTO `tb_user` (`id`, `phone`, `password`, `nick_name`, `icon`, `create_time`, `update_time`, `role`, `status`) VALUES
+INSERT INTO `tb_user` (`id`, `email`, `password`, `nick_name`, `icon`, `create_time`, `update_time`, `role`, `status`) VALUES
   (1, 'admin@flashsale.dev', '', 'Platform Admin', '', '2026-01-01 10:00:00', '2026-01-01 10:00:00', 'ADMIN', 'ACTIVE'),
-  (2, 'alice@example.com', '', 'Alice Demo', '', '2026-01-01 10:00:00', '2026-01-01 10:00:00', 'USER', 'ACTIVE'),
+  (2, 'alice@example.com', '', 'Alice Customer', '', '2026-01-01 10:00:00', '2026-01-01 10:00:00', 'USER', 'ACTIVE'),
   (3, 'brussels.customer@example.com', '', 'Brussels Customer', '', '2026-01-01 10:00:00', '2026-01-01 10:00:00', 'USER', 'ACTIVE'),
   (4, 'disabled@example.com', '', 'Disabled User', '', '2026-01-01 10:00:00', '2026-01-01 10:00:00', 'USER', 'DISABLED');
 
@@ -71,15 +71,15 @@ INSERT INTO `tb_user` (`id`, `phone`, `password`, `nick_name`, `icon`, `create_t
 -- ----------------------------
 DROP TABLE IF EXISTS `tb_user_info`;
 CREATE TABLE `tb_user_info`  (
-  `user_id` bigint(20) UNSIGNED NOT NULL COMMENT '主键，用户id',
-  `city` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '城市名称',
-  `introduce` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '个人介绍，不要超过128个字符',
-  `gender` tinyint(1) UNSIGNED NULL DEFAULT 0 COMMENT '性别，0：男，1：女',
-  `birthday` date NULL DEFAULT NULL COMMENT '生日',
-  `credits` int(8) UNSIGNED NULL DEFAULT 0 COMMENT '积分',
-  `level` tinyint(1) UNSIGNED NULL DEFAULT 0 COMMENT '会员级别，0~9级,0代表未开通会员',
-  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `user_id` bigint(20) UNSIGNED NOT NULL COMMENT 'user id primary key',
+  `city` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT 'city name',
+  `introduce` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'profile introduction',
+  `gender` tinyint(1) UNSIGNED NULL DEFAULT 0 COMMENT 'gender code',
+  `birthday` date NULL DEFAULT NULL COMMENT 'birthday',
+  `credits` int(8) UNSIGNED NULL DEFAULT 0 COMMENT 'loyalty credits',
+  `level` tinyint(1) UNSIGNED NULL DEFAULT 0 COMMENT 'membership level',
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
   PRIMARY KEY (`user_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
 
@@ -88,7 +88,7 @@ CREATE TABLE `tb_user_info`  (
 -- ----------------------------
 INSERT INTO `tb_user_info` (`user_id`, `city`, `introduce`, `gender`, `birthday`, `credits`, `level`, `create_time`, `update_time`) VALUES
   (1, 'Brussels', 'Platform administrator for local acceptance testing', 0, '1990-01-01', 0, 9, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
-  (2, 'Antwerp', 'Demo customer for flash sale order flow', 1, '1995-05-12', 120, 2, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
+  (2, 'Antwerp', 'Frequent customer for flash sale order flow', 1, '1995-05-12', 120, 2, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
   (3, 'Brussels', 'Coffee lover and early flash sale user', 0, '1992-09-18', 80, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
   (4, 'Ghent', 'Disabled account for auth status validation', 0, '1988-03-07', 0, 0, '2026-01-01 10:00:00', '2026-01-01 10:00:00');
 
@@ -119,10 +119,10 @@ CREATE TABLE `offers`  (
 -- Records of offers
 -- ----------------------------
 INSERT INTO `offers` (`id`, `merchant_id`, `title`, `description`, `rules`, `price_amount`, `face_value_amount`, `status`, `create_time`, `update_time`) VALUES
-  (1, 1, 'Coffee Flash Sale Voucher', 'EUR 10 coffee voucher', 'One purchase per user during the flash sale', 475, 1000, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
+  (1, 1, 'Coffee Flash Sale Deal', 'EUR 10 coffee value deal', 'One purchase per user during the flash sale', 475, 1000, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
   (2, 2, 'Fitness Trial Pass', 'One week fitness trial pass', 'Valid for first-time customers only', 990, 2500, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
   (3, 3, 'Coworking Day Pass', 'One day desk pass with coffee included', 'Limited weekday access', 1490, 3000, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
-  (4, 4, 'Bookshop Weekend Deal', 'Weekend reading bundle voucher', 'One voucher per user', 799, 1500, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00');
+  (4, 4, 'Bookshop Weekend Deal', 'Weekend reading bundle deal', 'One purchase per user', 799, 1500, 1, '2026-01-01 10:00:00', '2026-01-01 10:00:00');
 
 -- ----------------------------
 -- Table structure for flash_sale_offers

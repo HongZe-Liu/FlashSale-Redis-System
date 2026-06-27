@@ -88,14 +88,14 @@ public class FlashSaleOrderConsumer {
         } catch (Exception e) {
             if (message == null) {
                 String reason = "message_convert_error";
-                log.error("RabbitMQ秒杀订单消息格式异常，将进入DLQ，body={}",
+                log.error("RabbitMQ flash sale order message cannot be deserialized and will be sent to DLQ, body={}",
                         originalMessageBody(amqpMessage), e);
                 businessMetrics.recordMqConsumeFailure(reason);
                 publishDeadLetterAndAck(null, amqpMessage, channel, deliveryTag,
                         reason, retryCount(amqpMessage));
                 return;
             }
-            log.error("RabbitMQ秒杀订单消费出现未预期异常，message={}", message, e);
+            log.error("Unexpected RabbitMQ flash sale order consume exception, message={}", message, e);
             publishRetryOrDeadLetter(message, amqpMessage, channel, deliveryTag,
                     "unexpected_consume_exception");
         }
@@ -106,14 +106,14 @@ public class FlashSaleOrderConsumer {
         Long userId = message.getUserId();
         Long offerId = message.getOfferId();
         if (orderId == null || userId == null || offerId == null) {
-            log.error("RabbitMQ秒杀订单消息缺少必要字段，message={}", message);
+            log.error("RabbitMQ flash sale order message is missing required fields, message={}", message);
             return ConsumeDecision.deadLetter("missing_required_fields");
         }
 
         Boolean reserved = stringRedisTemplate.opsForSet()
                 .isMember(FLASH_SALE_ORDER_KEY + offerId, userId.toString());
         if (!Boolean.TRUE.equals(reserved)) {
-            log.warn("Redis秒杀资格不存在，消息按失效处理并ACK，userId={}, offerId={}, orderId={}",
+            log.warn("Redis flash sale reservation does not exist; message is acknowledged as stale, userId={}, offerId={}, orderId={}",
                     userId, offerId, orderId);
             return ConsumeDecision.success();
         }
@@ -124,11 +124,11 @@ public class FlashSaleOrderConsumer {
             locked = lock.tryLock(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("获取用户下单锁被中断，userId={}, offerId={}, orderId={}", userId, offerId, orderId);
+            log.warn("Interrupted while acquiring user order lock, userId={}, offerId={}, orderId={}", userId, offerId, orderId);
             return ConsumeDecision.retry("order_lock_interrupted");
         }
         if (!locked) {
-            log.warn("获取用户下单锁失败，稍后重试，userId={}, offerId={}, orderId={}", userId, offerId, orderId);
+            log.warn("User order lock was not acquired; message will be retried, userId={}, offerId={}, orderId={}", userId, offerId, orderId);
             return ConsumeDecision.retry("order_lock_not_acquired");
         }
 
@@ -144,18 +144,18 @@ public class FlashSaleOrderConsumer {
             }
             return ConsumeDecision.success();
         } catch (DuplicateKeyException e) {
-            log.warn("订单唯一索引冲突，按幂等成功处理，userId={}, offerId={}, orderId={}",
+            log.warn("Order unique index conflict; treating as idempotent success, userId={}, offerId={}, orderId={}",
                     userId, offerId, orderId);
             businessMetrics.recordOrderCreateIdempotent();
             return ConsumeDecision.success();
         } catch (Exception e) {
             if (isDuplicateOrderException(e)) {
-                log.warn("订单唯一索引冲突，按幂等成功处理，userId={}, offerId={}, orderId={}",
+                log.warn("Order unique index conflict; treating as idempotent success, userId={}, offerId={}, orderId={}",
                         userId, offerId, orderId);
                 businessMetrics.recordOrderCreateIdempotent();
                 return ConsumeDecision.success();
             }
-            log.error("订单落库异常，将投递到重试队列，userId={}, offerId={}, orderId={}",
+            log.error("Order persistence failed; message will be retried, userId={}, offerId={}, orderId={}",
                     userId, offerId, orderId, e);
             businessMetrics.recordOrderCreateFailure("create_order_exception");
             return ConsumeDecision.retry("create_order_exception");
@@ -171,7 +171,7 @@ public class FlashSaleOrderConsumer {
         businessMetrics.recordMqConsumeFailure(reason);
         int nextRetryCount = retryCount(amqpMessage) + 1;
         if (nextRetryCount >= MAX_RETRY_COUNT) {
-            log.error("RabbitMQ秒杀订单消息消费失败超过重试上限，将进入DLQ，retryCount={}, reason={}, message={}",
+            log.error("RabbitMQ flash sale order message exceeded retry limit and will be sent to DLQ, retryCount={}, reason={}, message={}",
                     nextRetryCount, reason, message);
             publishDeadLetterAndAck(message, amqpMessage, channel, deliveryTag, reason, nextRetryCount);
             return;
@@ -191,11 +191,11 @@ public class FlashSaleOrderConsumer {
         );
 
         if (published) {
-            log.warn("RabbitMQ秒杀订单消息已投递到重试队列，retryCount={}, reason={}, message={}",
+            log.warn("RabbitMQ flash sale order message was published to retry queue, retryCount={}, reason={}, message={}",
                     nextRetryCount, reason, message);
             channel.basicAck(deliveryTag, false);
         } else {
-            log.error("RabbitMQ秒杀订单消息投递重试队列失败，原消息将重新入队，retryCount={}, reason={}, message={}",
+            log.error("Failed to publish RabbitMQ flash sale order message to retry queue; original message will be requeued, retryCount={}, reason={}, message={}",
                     nextRetryCount, reason, message);
             channel.basicNack(deliveryTag, false, true);
         }
@@ -241,7 +241,7 @@ public class FlashSaleOrderConsumer {
             return;
         }
 
-        log.error("RabbitMQ秒杀订单消息投递DLQ失败，原消息将重新入队，reason={}, retryCount={}, message={}",
+        log.error("Failed to publish RabbitMQ flash sale order message to DLQ; original message will be requeued, reason={}, retryCount={}, message={}",
                 reason, retryCount, message);
         channel.basicNack(deliveryTag, false, true);
     }
@@ -255,13 +255,13 @@ public class FlashSaleOrderConsumer {
             CorrelationData.Confirm confirm = correlationData.getFuture()
                     .get(PUBLISH_CONFIRM_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!confirm.isAck()) {
-                log.error("RabbitMQ消息转发未确认，exchange={}, routingKey={}, correlationId={}, reason={}, payload={}",
+                log.error("RabbitMQ forwarded message was not confirmed, exchange={}, routingKey={}, correlationId={}, reason={}, payload={}",
                         exchange, routingKey, correlationId, confirm.getReason(), payload);
                 businessMetrics.recordMqPublishFailure(destination, "confirm_nack");
                 return false;
             }
             if (correlationData.getReturnedMessage() != null) {
-                log.error("RabbitMQ消息转发不可路由，exchange={}, routingKey={}, correlationId={}, payload={}",
+                log.error("RabbitMQ forwarded message was returned as unroutable, exchange={}, routingKey={}, correlationId={}, payload={}",
                         exchange, routingKey, correlationId, payload);
                 businessMetrics.recordMqPublishFailure(destination, "returned");
                 return false;
@@ -269,17 +269,17 @@ public class FlashSaleOrderConsumer {
             businessMetrics.recordMqPublishSuccess(destination);
             return true;
         } catch (TimeoutException e) {
-            log.error("RabbitMQ消息转发确认超时，exchange={}, routingKey={}, correlationId={}, payload={}",
+            log.error("RabbitMQ forwarded message confirm timed out, exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
             businessMetrics.recordMqPublishFailure(destination, "confirm_timeout");
             return false;
         } catch (AmqpException e) {
-            log.error("RabbitMQ消息转发异常，exchange={}, routingKey={}, correlationId={}, payload={}",
+            log.error("RabbitMQ forwarded message failed with AMQP exception, exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
             businessMetrics.recordMqPublishFailure(destination, "amqp_exception");
             return false;
         } catch (Exception e) {
-            log.error("RabbitMQ消息转发出现未预期异常，exchange={}, routingKey={}, correlationId={}, payload={}",
+            log.error("RabbitMQ forwarded message failed unexpectedly, exchange={}, routingKey={}, correlationId={}, payload={}",
                     exchange, routingKey, correlationId, payload, e);
             businessMetrics.recordMqPublishFailure(destination, "unexpected_exception");
             return false;
@@ -307,7 +307,7 @@ public class FlashSaleOrderConsumer {
         String userId = order.getUserId().toString();
         stringRedisTemplate.opsForValue().set(FLASH_SALE_STOCK_KEY + offerId, "0");
         stringRedisTemplate.opsForSet().remove(FLASH_SALE_ORDER_KEY + offerId, userId);
-        log.warn("数据库库存扣减失败，已保守修正Redis库存并回滚用户资格，userId={}, offerId={}, orderId={}",
+        log.warn("Database stock deduction failed; Redis stock and user reservation were conservatively corrected, userId={}, offerId={}, orderId={}",
                 userId, offerId, order.getId());
     }
 

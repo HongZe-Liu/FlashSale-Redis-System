@@ -1,5 +1,5 @@
 package com.flashsale.platform.utils;
-// 脱敏工具类
+
 public class MaskUtils {
 
     public static String maskEmail(String email) {
@@ -11,13 +11,6 @@ public class MaskUtils {
             return "***";
         }
         return "***" + email.substring(atIndex);
-    }
-
-    public static String maskPhone(String phone) {
-        if (phone == null || phone.length() < 7) {
-            return "***";
-        }
-        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 
     public static String maskToken(String token) {

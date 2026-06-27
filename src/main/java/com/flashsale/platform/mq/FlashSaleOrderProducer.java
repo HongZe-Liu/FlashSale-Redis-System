@@ -41,7 +41,7 @@ public class FlashSaleOrderProducer {
             CorrelationData.Confirm confirm = correlationData.getFuture()
                     .get(PUBLISH_CONFIRM_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!confirm.isAck()) {
-                log.error("RabbitMQ订单消息投递未确认，correlationId={}, reason={}, message={}",
+                log.error("RabbitMQ order message was not confirmed, correlationId={}, reason={}, message={}",
                         correlationId, confirm.getReason(), message);
                 businessMetrics.recordMqPublishFailure(DESTINATION_ORDER_CREATE, "confirm_nack");
                 return false;
@@ -49,7 +49,7 @@ public class FlashSaleOrderProducer {
 
             Message returnedMessage = correlationData.getReturnedMessage();
             if (returnedMessage != null) {
-                log.error("RabbitMQ订单消息不可路由，correlationId={}, exchange={}, routingKey={}, message={}",
+                log.error("RabbitMQ order message was returned as unroutable, correlationId={}, exchange={}, routingKey={}, message={}",
                         correlationId,
                         RabbitMqConfig.ORDER_EXCHANGE,
                         RabbitMqConfig.ORDER_CREATE_ROUTING_KEY,
@@ -58,20 +58,20 @@ public class FlashSaleOrderProducer {
                 return false;
             }
 
-            log.debug("RabbitMQ订单消息投递成功，correlationId={}, message={}", correlationId, message);
+            log.debug("RabbitMQ order message published, correlationId={}, message={}", correlationId, message);
             businessMetrics.recordMqPublishSuccess(DESTINATION_ORDER_CREATE);
             return true;
         } catch (TimeoutException e) {
-            log.error("RabbitMQ订单消息投递确认超时，correlationId={}, timeoutMs={}, message={}",
+            log.error("RabbitMQ order message confirm timed out, correlationId={}, timeoutMs={}, message={}",
                     correlationId, PUBLISH_CONFIRM_TIMEOUT_MS, message, e);
             businessMetrics.recordMqPublishFailure(DESTINATION_ORDER_CREATE, "confirm_timeout");
             return false;
         } catch (AmqpException e) {
-            log.error("RabbitMQ订单消息发送异常，correlationId={}, message={}", correlationId, message, e);
+            log.error("RabbitMQ order message failed with AMQP exception, correlationId={}, message={}", correlationId, message, e);
             businessMetrics.recordMqPublishFailure(DESTINATION_ORDER_CREATE, "amqp_exception");
             return false;
         } catch (Exception e) {
-            log.error("RabbitMQ订单消息投递出现未预期异常，correlationId={}, message={}",
+            log.error("RabbitMQ order message publish failed unexpectedly, correlationId={}, message={}",
                     correlationId, message, e);
             businessMetrics.recordMqPublishFailure(DESTINATION_ORDER_CREATE, "unexpected_exception");
             return false;

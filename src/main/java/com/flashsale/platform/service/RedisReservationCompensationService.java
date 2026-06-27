@@ -30,7 +30,7 @@ public class RedisReservationCompensationService {
 
     public boolean compensate(Long offerId, Long userId, Long orderId, String reason) {
         if (offerId == null || userId == null) {
-            log.warn("跳过Redis秒杀资格补偿，参数不完整，offerId={}, userId={}, orderId={}, reason={}",
+            log.warn("Skipping Redis reservation compensation because arguments are incomplete, offerId={}, userId={}, orderId={}, reason={}",
                     offerId, userId, orderId, reason);
             businessMetrics.recordRedisCompensationFailure("invalid_arguments");
             return false;
@@ -46,31 +46,31 @@ public class RedisReservationCompensationService {
             );
         } catch (RuntimeException e) {
             businessMetrics.recordRedisCompensationFailure("redis_exception");
-            log.error("Redis秒杀资格补偿执行异常，offerId={}, userId={}, orderId={}, reason={}",
+            log.error("Redis reservation compensation failed during script execution, offerId={}, userId={}, orderId={}, reason={}",
                     offerId, userId, orderId, reason, e);
             throw e;
         }
 
         if (result == null) {
-            log.error("Redis秒杀资格补偿执行结果为空，offerId={}, userId={}, orderId={}, reason={}",
+            log.error("Redis reservation compensation returned null, offerId={}, userId={}, orderId={}, reason={}",
                     offerId, userId, orderId, reason);
             businessMetrics.recordRedisCompensationFailure("script_result_null");
             return false;
         }
         if (result == 1L) {
-            log.warn("Redis秒杀资格补偿成功，已回滚库存和用户资格，offerId={}, userId={}, orderId={}, reason={}",
+            log.warn("Redis reservation compensation completed; stock and user reservation were restored, offerId={}, userId={}, orderId={}, reason={}",
                     offerId, userId, orderId, reason);
             businessMetrics.recordRedisCompensationSuccess(reason);
             return true;
         }
         if (result == 2L) {
-            log.warn("Redis秒杀资格已移除，但库存Key不存在，未回补库存，offerId={}, userId={}, orderId={}, reason={}",
+            log.warn("Redis reservation was removed but stock key was missing, offerId={}, userId={}, orderId={}, reason={}",
                     offerId, userId, orderId, reason);
             businessMetrics.recordRedisCompensationFailure("stock_key_missing");
             return false;
         }
 
-        log.info("Redis秒杀资格无需补偿，用户资格不存在，offerId={}, userId={}, orderId={}, reason={}",
+        log.info("Redis reservation compensation skipped because user reservation does not exist, offerId={}, userId={}, orderId={}, reason={}",
                 offerId, userId, orderId, reason);
         businessMetrics.recordRedisCompensationNoop(reason);
         return false;

@@ -31,9 +31,6 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
-    /**
-     * 根据id查询商家详情，并使用 Redis 缓存空值防止缓存穿透。
-     */
     @Override
     public Result queryById(Long id) {
         Merchant merchant = cacheClient.queryWithPassThrough(
@@ -50,9 +47,6 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
         return Result.ok(merchant);
     }
 
-    /**
-     * 更新商家信息
-     */
     @Override
     public Result update(Merchant merchant) {
         if (merchant.getId() == null) {

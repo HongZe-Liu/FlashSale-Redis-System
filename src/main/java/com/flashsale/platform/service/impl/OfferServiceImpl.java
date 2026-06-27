@@ -28,14 +28,6 @@ import static com.flashsale.platform.utils.RedisConstants.FLASH_SALE_OFFER_KEY;
 import static com.flashsale.platform.utils.RedisConstants.FLASH_SALE_ORDER_KEY;
 import static com.flashsale.platform.utils.RedisConstants.FLASH_SALE_STOCK_KEY;
 
-/**
- * <p>
- *  服务实现类
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
 @Service
 public class OfferServiceImpl extends ServiceImpl<OfferMapper, Offer> implements IOfferService {
 

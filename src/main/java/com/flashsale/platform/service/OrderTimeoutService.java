@@ -63,7 +63,7 @@ public class OrderTimeoutService {
                     restoreRedisStock(order);
                 }
             } catch (Exception e) {
-                log.error("超时订单取消失败，orderId={}, userId={}, offerId={}",
+                log.error("Failed to expire overdue order, orderId={}, userId={}, offerId={}",
                         order.getId(), order.getUserId(), order.getOfferId(), e);
             }
         }
@@ -91,10 +91,10 @@ public class OrderTimeoutService {
                 .eq("offer_id", order.getOfferId())
                 .update();
         if (!stockRestored) {
-            throw new IllegalStateException("回补MySQL库存失败");
+            throw new IllegalStateException("Failed to restore MySQL stock");
         }
 
-        log.warn("超时订单已取消并回补MySQL库存，orderId={}, userId={}, offerId={}",
+        log.warn("Expired order was cancelled and MySQL stock restored, orderId={}, userId={}, offerId={}",
                 order.getId(), order.getUserId(), order.getOfferId());
         return true;
     }
@@ -104,14 +104,14 @@ public class OrderTimeoutService {
         try {
             if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(stockKey))) {
                 stringRedisTemplate.opsForValue().increment(stockKey);
-                log.warn("超时订单已回补Redis库存，orderId={}, userId={}, offerId={}",
+                log.warn("Redis stock restored for expired order, orderId={}, userId={}, offerId={}",
                         order.getId(), order.getUserId(), order.getOfferId());
             } else {
-                log.warn("超时订单Redis库存Key不存在，跳过Redis库存回补，orderId={}, userId={}, offerId={}",
+                log.warn("Redis stock key missing for expired order; restore skipped, orderId={}, userId={}, offerId={}",
                         order.getId(), order.getUserId(), order.getOfferId());
             }
         } catch (Exception e) {
-            log.error("超时订单Redis库存回补失败，需要人工核对，orderId={}, userId={}, offerId={}",
+            log.error("Failed to restore Redis stock for expired order; manual reconciliation required, orderId={}, userId={}, offerId={}",
                     order.getId(), order.getUserId(), order.getOfferId(), e);
         }
     }

@@ -66,7 +66,7 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
                 .eq("provider_payment_id", request.getProviderPaymentId())
                 .one();
         if (paymentOrder == null) {
-            return markEventFailed(event, "payment_order_not_found", "支付单不存在");
+            return markEventFailed(event, "payment_order_not_found", "Payment order does not exist");
         }
 
         WebhookValidation businessValidation = validateBusinessPayload(request, paymentOrder);
@@ -76,7 +76,7 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
 
         Order order = orderService.getById(paymentOrder.getOrderId());
         if (order == null) {
-            return markEventFailed(event, "order_not_found", "订单不存在");
+            return markEventFailed(event, "order_not_found", "Order does not exist");
         }
 
         if (PaymentStatus.PAID.name().equals(paymentOrder.getStatus())
@@ -87,7 +87,7 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
         }
 
         if (!Integer.valueOf(OrderStatus.PENDING_PAYMENT.getCode()).equals(order.getStatus())) {
-            return markEventFailed(event, "invalid_order_status", "订单状态不允许支付");
+            return markEventFailed(event, "invalid_order_status", "Order status does not allow payment");
         }
 
         LocalDateTime paidAt = LocalDateTime.now();
@@ -98,7 +98,7 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
                 .eq("status", OrderStatus.PENDING_PAYMENT.getCode())
                 .update();
         if (!orderUpdated) {
-            return markEventFailed(event, "order_status_changed", "订单状态已变化，支付成功事件未生效");
+            return markEventFailed(event, "order_status_changed", "Order status changed; payment success event was not applied");
         }
 
         boolean paymentUpdated = paymentOrderService.update()
@@ -109,7 +109,7 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
                 .update();
         if (!paymentUpdated) {
             businessMetrics.recordPaymentWebhookFailure(PROVIDER_MOCK, "payment_status_update_failed");
-            throw new IllegalStateException("支付单状态更新失败");
+            throw new IllegalStateException("Failed to update payment order status");
         }
 
         markEventProcessed(event);
@@ -119,32 +119,32 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
 
     private WebhookValidation validateRequest(MockPaymentWebhookRequest request) {
         if (request == null) {
-            return WebhookValidation.failure("request_null", "webhook请求不能为空");
+            return WebhookValidation.failure("request_null", "Webhook request must not be null");
         }
         if (request.getEventId() == null || request.getEventId().isBlank()) {
-            return WebhookValidation.failure("event_id_missing", "eventId不能为空");
+            return WebhookValidation.failure("event_id_missing", "eventId must not be blank");
         }
         if (request.getProviderPaymentId() == null || request.getProviderPaymentId().isBlank()) {
-            return WebhookValidation.failure("provider_payment_id_missing", "providerPaymentId不能为空");
+            return WebhookValidation.failure("provider_payment_id_missing", "providerPaymentId must not be blank");
         }
         if (request.getOrderId() == null || request.getAmount() == null || request.getCurrency() == null) {
-            return WebhookValidation.failure("business_arguments_missing", "webhook业务参数不完整");
+            return WebhookValidation.failure("business_arguments_missing", "Webhook business arguments are incomplete");
         }
         if (request.getEventType() == null || !"payment.succeeded".equals(request.getEventType())) {
-            return WebhookValidation.failure("unsupported_event_type", "不支持的mock webhook事件类型");
+            return WebhookValidation.failure("unsupported_event_type", "Unsupported mock webhook event type");
         }
         return WebhookValidation.success();
     }
 
     private WebhookValidation validateBusinessPayload(MockPaymentWebhookRequest request, PaymentOrder paymentOrder) {
         if (!request.getOrderId().equals(paymentOrder.getOrderId())) {
-            return WebhookValidation.failure("order_id_mismatch", "webhook订单号不匹配");
+            return WebhookValidation.failure("order_id_mismatch", "Webhook order id mismatch");
         }
         if (!request.getAmount().equals(paymentOrder.getAmount())) {
-            return WebhookValidation.failure("amount_mismatch", "webhook金额不匹配");
+            return WebhookValidation.failure("amount_mismatch", "Webhook amount mismatch");
         }
         if (!request.getCurrency().equalsIgnoreCase(paymentOrder.getCurrency())) {
-            return WebhookValidation.failure("currency_mismatch", "webhook币种不匹配");
+            return WebhookValidation.failure("currency_mismatch", "Webhook currency mismatch");
         }
         return WebhookValidation.success();
     }
@@ -169,31 +169,31 @@ public class PaymentWebhookServiceImpl implements IPaymentWebhookService {
                 .eq("event_id", request.getEventId())
                 .one();
         if (existing == null) {
-            log.warn("Mock支付webhook重复事件未查询到原事件，eventId={}", request.getEventId());
+            log.warn("Duplicate mock payment webhook has no original event, eventId={}", request.getEventId());
             businessMetrics.recordPaymentWebhookDuplicate(PROVIDER_MOCK, "missing_original");
-            return Result.fail("webhook重复事件状态未知，请稍后重试");
+            return Result.fail("Duplicate webhook event state is unknown; please retry later");
         }
 
         if (WebhookEventStatus.PROCESSED.name().equals(existing.getStatus())) {
-            log.info("Mock支付webhook重复成功事件，按幂等成功返回，eventId={}", request.getEventId());
+            log.info("Duplicate mock payment webhook was already processed, eventId={}", request.getEventId());
             businessMetrics.recordPaymentWebhookDuplicate(PROVIDER_MOCK, "processed");
             return Result.ok();
         }
 
         if (WebhookEventStatus.FAILED.name().equals(existing.getStatus())) {
-            log.info("Mock支付webhook重复失败事件，按失败返回，eventId={}, error={}",
+            log.info("Duplicate mock payment webhook was already failed, eventId={}, error={}",
                     request.getEventId(), existing.getErrorMessage());
             businessMetrics.recordPaymentWebhookDuplicate(PROVIDER_MOCK, "failed");
             String errorMessage = existing.getErrorMessage();
             if (errorMessage == null || errorMessage.isBlank()) {
-                errorMessage = "webhook事件已处理失败";
+                errorMessage = "Webhook event was already processed as failed";
             }
             return Result.fail(errorMessage);
         }
 
-        log.info("Mock支付webhook重复处理中事件，拒绝重复处理，eventId={}", request.getEventId());
+        log.info("Duplicate mock payment webhook is still processing, eventId={}", request.getEventId());
         businessMetrics.recordPaymentWebhookDuplicate(PROVIDER_MOCK, "processing");
-        return Result.fail("webhook事件正在处理中，请稍后重试");
+        return Result.fail("Webhook event is already being processed; please retry later");
     }
 
     private void markEventProcessed(PaymentWebhookEvent event) {

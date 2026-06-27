@@ -78,7 +78,7 @@ public class OrderServiceImpl
         );
         if (result == null) {
             businessMetrics.recordFlashSaleRequestFailure("lua_result_null");
-            return Result.fail("抢购失败，请稍后重试");
+            return Result.fail("Flash sale request failed; please retry later");
         }
         if (result.intValue() != 0) {
             businessMetrics.recordFlashSaleRequestFailure(flashSaleFailReason(result.intValue()));
@@ -95,7 +95,7 @@ public class OrderServiceImpl
                     orderId,
                     "rabbitmq_publish_failed"
             );
-            return Result.fail("抢购失败，请稍后重试");
+            return Result.fail("Flash sale request failed; please retry later");
         }
         businessMetrics.recordFlashSaleRequestSuccess();
         return Result.ok(orderId);
@@ -112,14 +112,14 @@ public class OrderServiceImpl
                 .eq("user_id", userId)
                 .count();
         if (count > 0) {
-            log.warn("订单已存在，按幂等成功处理，userId={}, offerId={}", userId, offerId);
+            log.warn("Order already exists; treating as idempotent success, userId={}, offerId={}", userId, offerId);
             businessMetrics.recordOrderCreateIdempotent();
             return true;
         }
 
         Offer offer = offerMapper.selectById(offerId);
         if (offer == null || offer.getPriceAmount() == null || offer.getPriceAmount() <= 0) {
-            log.warn("订单金额快照创建失败，offer无效或价格非法，userId={}, offerId={}", userId, offerId);
+            log.warn("Failed to snapshot order amount because offer is invalid, userId={}, offerId={}", userId, offerId);
             businessMetrics.recordOrderCreateFailure("invalid_offer");
             return false;
         }
@@ -131,7 +131,7 @@ public class OrderServiceImpl
                 .update();
 
         if (!stockUpdated) {
-            log.warn("数据库库存扣减失败，将由消费端触发Redis预扣补偿，userId={}, offerId={}", userId, offerId);
+            log.warn("Database stock deduction failed; Redis reservation will be compensated, userId={}, offerId={}", userId, offerId);
             businessMetrics.recordOrderCreateFailure("db_stock_not_enough");
             return false;
         }
@@ -146,7 +146,7 @@ public class OrderServiceImpl
 
         boolean saved = save(order);
         if (!saved) {
-            throw new IllegalStateException("保存秒杀订单失败");
+            throw new IllegalStateException("Failed to save flash sale order");
         }
         businessMetrics.recordOrderCreateSuccess();
         return true;
@@ -172,17 +172,17 @@ public class OrderServiceImpl
     private String flashSaleFailMessage(int code) {
         switch (code) {
             case 1:
-                return "库存不足";
+                return "Insufficient stock";
             case 2:
-                return "不能重复下单";
+                return "Duplicate order is not allowed";
             case 3:
-                return "秒杀活动尚未开始";
+                return "Flash sale has not started";
             case 4:
-                return "秒杀活动已经结束";
+                return "Flash sale has ended";
             case 5:
-                return "秒杀活动未初始化";
+                return "Flash sale is not initialized";
             default:
-                return "抢购失败，请稍后重试";
+                return "Flash sale request failed; please retry later";
         }
     }
 }

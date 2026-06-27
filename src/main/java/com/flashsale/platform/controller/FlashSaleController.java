@@ -36,7 +36,7 @@ public class FlashSaleController {
     public Result placeFlashSaleOrder(@PathVariable("offerId") Long offerId,
                                       @AuthenticationPrincipal UserDTO user) {
         if (user == null) {
-            return Result.fail("用户未登录");
+            return Result.fail("User is not authenticated");
         }
         return orderService.placeFlashSaleOrder(offerId, user.getId());
     }

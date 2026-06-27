@@ -6,14 +6,6 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
-/**
- * <p>
- *  Mapper 接口
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
 public interface OfferMapper extends BaseMapper<Offer> {
 
     List<Offer> queryOffersByMerchant(@Param("merchantId") Long merchantId);

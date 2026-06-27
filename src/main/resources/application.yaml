@@ -1,5 +1,3 @@
-# 生产环境
-
 server:
   port: 8080
 management:
@@ -40,9 +38,9 @@ spring:
         min-idle: 1
         time-between-eviction-runs: 10s
   jackson:
-    default-property-inclusion: non_null # JSON处理时忽略非空字段
+    default-property-inclusion: non_null
 mybatis-plus:
-  type-aliases-package: com.flashsale.platform.entity # 别名扫描包
+  type-aliases-package: com.flashsale.platform.entity
 logging:
   level:
     org.springframework.amqp: DEBUG

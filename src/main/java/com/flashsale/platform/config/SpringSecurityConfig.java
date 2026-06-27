@@ -11,16 +11,15 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-// Spring Security 配置类
 @Configuration
 @EnableWebSecurity
 @EnableGlobalMethodSecurity(prePostEnabled = true)
-public class springSecurityConfig extends WebSecurityConfigurerAdapter {
+public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
 
     private final AuthFilter authFilter;
     private final Environment environment;
 
-    public springSecurityConfig(AuthFilter authFilter, Environment environment) {
+    public SpringSecurityConfig(AuthFilter authFilter, Environment environment) {
         this.authFilter = authFilter;
         this.environment = environment;
     }
@@ -49,12 +48,12 @@ public class springSecurityConfig extends WebSecurityConfigurerAdapter {
                 .authenticationEntryPoint((req, res, ex) -> {
                     res.setStatus(401);
                     res.setContentType("application/json;charset=UTF-8");
-                    res.getWriter().write("{\"msg\":\"未登录\"}");
+                    res.getWriter().write("{\"msg\":\"Authentication required\"}");
                 })
                 .accessDeniedHandler((req, res, ex) -> {
                     res.setStatus(403);
                     res.setContentType("application/json;charset=UTF-8");
-                    res.getWriter().write("{\"msg\":\"无权限\"}");
+                    res.getWriter().write("{\"msg\":\"Access denied\"}");
                 });
         http.addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
     }

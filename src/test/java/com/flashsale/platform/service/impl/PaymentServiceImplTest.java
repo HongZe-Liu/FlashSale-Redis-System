@@ -83,7 +83,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(null, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单参数不完整");
+        assertThat(result.getErrorMsg()).isEqualTo("Order arguments are incomplete");
         verify(orderService, never()).getById(any());
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "invalid_arguments");
     }
@@ -97,7 +97,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单已超时，请等待系统取消");
+        assertThat(result.getErrorMsg()).isEqualTo("Order has expired; please wait for cancellation");
         verify(paymentOrderService, never()).save(any());
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "order_expired");
     }
@@ -109,7 +109,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单不存在");
+        assertThat(result.getErrorMsg()).isEqualTo("Order does not exist");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "order_not_found");
     }
@@ -123,7 +123,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("无权支付该订单");
+        assertThat(result.getErrorMsg()).isEqualTo("Not allowed to pay this order");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "forbidden_order_owner");
     }
@@ -137,7 +137,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单状态不允许支付");
+        assertThat(result.getErrorMsg()).isEqualTo("Order status does not allow payment");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "invalid_order_status");
     }
@@ -151,7 +151,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单金额异常");
+        assertThat(result.getErrorMsg()).isEqualTo("Invalid order amount");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "invalid_amount");
     }
@@ -165,7 +165,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单币种异常");
+        assertThat(result.getErrorMsg()).isEqualTo("Invalid order currency");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "invalid_currency");
     }
@@ -217,7 +217,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("支付单创建中，请稍后重试");
+        assertThat(result.getErrorMsg()).isEqualTo("Payment order is being created; please retry later");
         verify(paymentOrderService, never()).save(any());
         verify(paymentProvider, never()).createPayment(any());
         verify(businessMetrics).recordPaymentCreateFailure(PaymentProviderType.MOCK.name(), "payment_creating");
@@ -231,7 +231,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("当前支付单状态不允许继续支付");
+        assertThat(result.getErrorMsg()).isEqualTo("Current payment status does not allow retry");
         verify(paymentOrderService, never()).save(any());
         verify(paymentProvider, never()).createPayment(any());
         verify(businessMetrics).recordPaymentCreateFailure(PaymentProviderType.MOCK.name(), "payment_status_not_allowed");
@@ -245,7 +245,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("UNKNOWN"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("不支持的支付渠道");
+        assertThat(result.getErrorMsg()).isEqualTo("Unsupported payment provider");
         verify(paymentOrderService, never()).save(any());
         verify(businessMetrics).recordPaymentCreateFailure("unknown", "unsupported_provider");
     }
@@ -258,7 +258,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("STRIPE"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("支付渠道暂不可用");
+        assertThat(result.getErrorMsg()).isEqualTo("Payment provider is temporarily unavailable");
         verify(paymentOrderService, never()).save(any());
         verify(businessMetrics).recordPaymentCreateFailure(PaymentProviderType.STRIPE.name(), "provider_unavailable");
     }
@@ -273,7 +273,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("创建支付单失败");
+        assertThat(result.getErrorMsg()).isEqualTo("Failed to create payment order");
         verify(paymentProvider, never()).createPayment(any());
         verify(businessMetrics).recordPaymentCreateFailure(PaymentProviderType.MOCK.name(), "save_failed");
     }
@@ -291,7 +291,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.createPayment(ORDER_ID, USER_ID, request("MOCK"));
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("创建支付失败，请稍后重试");
+        assertThat(result.getErrorMsg()).isEqualTo("Failed to create payment; please retry later");
 
         ArgumentCaptor<PaymentOrder> captor = ArgumentCaptor.forClass(PaymentOrder.class);
         verify(paymentOrderService).updateById(captor.capture());
@@ -359,7 +359,7 @@ class PaymentServiceImplTest {
         Result result = paymentService.queryPaymentStatus(ORDER_ID, USER_ID);
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("无权查看该订单支付状态");
+        assertThat(result.getErrorMsg()).isEqualTo("Not allowed to view this order payment status");
         verify(paymentOrderService, never()).query();
     }
 

@@ -26,7 +26,7 @@ public class PaymentController {
                                 @AuthenticationPrincipal UserDTO user,
                                 @RequestBody(required = false) CreatePaymentRequest request) {
         if (user == null) {
-            return Result.fail("用户未登录");
+            return Result.fail("User is not authenticated");
         }
         return paymentService.createPayment(orderId, user.getId(), request);
     }
@@ -35,7 +35,7 @@ public class PaymentController {
     public Result queryPaymentStatus(@PathVariable("orderId") Long orderId,
                                      @AuthenticationPrincipal UserDTO user) {
         if (user == null) {
-            return Result.fail("用户未登录");
+            return Result.fail("User is not authenticated");
         }
         return paymentService.queryPaymentStatus(orderId, user.getId());
     }

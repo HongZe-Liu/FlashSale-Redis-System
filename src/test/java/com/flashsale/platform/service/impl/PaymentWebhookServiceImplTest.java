@@ -74,7 +74,7 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(null, "{}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("webhook请求不能为空");
+        assertThat(result.getErrorMsg()).isEqualTo("Webhook request must not be null");
         verify(paymentWebhookEventService, never()).save(any());
         verify(businessMetrics).recordPaymentWebhookReceived(PaymentProviderType.MOCK.name());
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "request_null");
@@ -88,7 +88,7 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(request, "{}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("eventId不能为空");
+        assertThat(result.getErrorMsg()).isEqualTo("eventId must not be blank");
         verify(paymentWebhookEventService, never()).save(any());
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "event_id_missing");
     }
@@ -101,7 +101,7 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(request, "{}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("不支持的mock webhook事件类型");
+        assertThat(result.getErrorMsg()).isEqualTo("Unsupported mock webhook event type");
         verify(paymentWebhookEventService, never()).save(any());
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "unsupported_event_type");
     }
@@ -145,7 +145,7 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("webhook事件正在处理中，请稍后重试");
+        assertThat(result.getErrorMsg()).isEqualTo("Webhook event is already being processed; please retry later");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentWebhookDuplicate(PaymentProviderType.MOCK.name(), "processing");
     }
@@ -160,7 +160,7 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("webhook重复事件状态未知，请稍后重试");
+        assertThat(result.getErrorMsg()).isEqualTo("Duplicate webhook event state is unknown; please retry later");
         verify(paymentOrderService, never()).query();
         verify(businessMetrics).recordPaymentWebhookDuplicate(PaymentProviderType.MOCK.name(), "missing_original");
     }
@@ -175,8 +175,8 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("支付单不存在");
-        verifyFailedEvent("支付单不存在");
+        assertThat(result.getErrorMsg()).isEqualTo("Payment order does not exist");
+        verifyFailedEvent("Payment order does not exist");
         verify(orderService, never()).getById(any());
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "payment_order_not_found");
     }
@@ -193,12 +193,12 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("webhook金额不匹配");
+        assertThat(result.getErrorMsg()).isEqualTo("Webhook amount mismatch");
 
         ArgumentCaptor<PaymentWebhookEvent> captor = ArgumentCaptor.forClass(PaymentWebhookEvent.class);
         verify(paymentWebhookEventService).updateById(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(WebhookEventStatus.FAILED.name());
-        assertThat(captor.getValue().getErrorMessage()).isEqualTo("webhook金额不匹配");
+        assertThat(captor.getValue().getErrorMessage()).isEqualTo("Webhook amount mismatch");
         verify(orderService, never()).update();
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "amount_mismatch");
     }
@@ -215,8 +215,8 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("webhook币种不匹配");
-        verifyFailedEvent("webhook币种不匹配");
+        assertThat(result.getErrorMsg()).isEqualTo("Webhook currency mismatch");
+        verifyFailedEvent("Webhook currency mismatch");
         verify(orderService, never()).getById(any());
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "currency_mismatch");
     }
@@ -232,8 +232,8 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单不存在");
-        verifyFailedEvent("订单不存在");
+        assertThat(result.getErrorMsg()).isEqualTo("Order does not exist");
+        verifyFailedEvent("Order does not exist");
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "order_not_found");
     }
 
@@ -271,10 +271,10 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单状态不允许支付");
+        assertThat(result.getErrorMsg()).isEqualTo("Order status does not allow payment");
         verify(orderService, never()).update();
         verify(paymentOrderService, never()).update();
-        verifyFailedEvent("订单状态不允许支付");
+        verifyFailedEvent("Order status does not allow payment");
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "invalid_order_status");
     }
 
@@ -290,9 +290,9 @@ class PaymentWebhookServiceImplTest {
         Result result = webhookService.handleMockPaymentSucceeded(validRequest(), "{\"eventId\":\"evt_1\"}");
 
         assertThat(result.getSuccess()).isFalse();
-        assertThat(result.getErrorMsg()).isEqualTo("订单状态已变化，支付成功事件未生效");
+        assertThat(result.getErrorMsg()).isEqualTo("Order status changed; payment success event was not applied");
         verify(paymentOrderService, never()).update();
-        verifyFailedEvent("订单状态已变化，支付成功事件未生效");
+        verifyFailedEvent("Order status changed; payment success event was not applied");
         verify(businessMetrics).recordPaymentWebhookFailure(PaymentProviderType.MOCK.name(), "order_status_changed");
     }
 
@@ -333,7 +333,7 @@ class PaymentWebhookServiceImplTest {
 
         assertThatThrownBy(() -> webhookService.handleMockPaymentSucceeded(validRequest(), "{}"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("支付单状态更新失败");
+                .hasMessage("Failed to update payment order status");
 
         verify(businessMetrics).recordPaymentWebhookFailure(
                 PaymentProviderType.MOCK.name(),
