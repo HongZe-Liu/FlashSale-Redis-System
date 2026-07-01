@@ -278,7 +278,7 @@ class FlashSaleOrderConsumerTest {
     private void stubRabbitPublishConfirm(boolean ack) {
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(4);
-            correlationData.getFuture().set(new CorrelationData.Confirm(ack, ack ? null : "nack"));
+            correlationData.getFuture().complete(new CorrelationData.Confirm(ack, ack ? null : "nack"));
             return null;
         }).when(rabbitTemplate).convertAndSend(
                 anyString(),

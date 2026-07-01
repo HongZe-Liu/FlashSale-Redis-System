@@ -5,7 +5,7 @@ import com.flashsale.platform.service.IOfferService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 @RestController
 @RequestMapping("/offers")
 public class OfferController {

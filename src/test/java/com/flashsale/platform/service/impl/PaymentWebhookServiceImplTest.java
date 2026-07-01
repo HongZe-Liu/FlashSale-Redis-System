@@ -15,11 +15,11 @@ import com.flashsale.platform.observability.BusinessMetrics;
 import com.flashsale.platform.service.IOrderService;
 import com.flashsale.platform.service.IPaymentOrderService;
 import com.flashsale.platform.service.IPaymentWebhookEventService;
+import com.flashsale.platform.support.MockitoChainAnswers;
 import com.flashsale.platform.utils.RedisIdWorker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -402,7 +402,7 @@ class PaymentWebhookServiceImplTest {
 
     @SuppressWarnings("unchecked")
     private QueryChainWrapper<PaymentWebhookEvent> webhookEventQueryReturning(PaymentWebhookEvent event) {
-        QueryChainWrapper<PaymentWebhookEvent> query = mock(QueryChainWrapper.class, Answers.RETURNS_SELF);
+        QueryChainWrapper<PaymentWebhookEvent> query = mock(QueryChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(paymentWebhookEventService.query()).thenReturn(query);
         doReturn(event).when(query).one();
         return query;
@@ -410,7 +410,7 @@ class PaymentWebhookServiceImplTest {
 
     @SuppressWarnings("unchecked")
     private QueryChainWrapper<PaymentOrder> paymentOrderQueryReturning(PaymentOrder paymentOrder) {
-        QueryChainWrapper<PaymentOrder> query = mock(QueryChainWrapper.class, Answers.RETURNS_SELF);
+        QueryChainWrapper<PaymentOrder> query = mock(QueryChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(paymentOrderService.query()).thenReturn(query);
         doReturn(paymentOrder).when(query).one();
         return query;
@@ -418,7 +418,7 @@ class PaymentWebhookServiceImplTest {
 
     @SuppressWarnings("unchecked")
     private UpdateChainWrapper<Order> orderUpdateReturning(boolean updated) {
-        UpdateChainWrapper<Order> update = mock(UpdateChainWrapper.class, Answers.RETURNS_SELF);
+        UpdateChainWrapper<Order> update = mock(UpdateChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(orderService.update()).thenReturn(update);
         when(update.update()).thenReturn(updated);
         return update;
@@ -426,7 +426,7 @@ class PaymentWebhookServiceImplTest {
 
     @SuppressWarnings("unchecked")
     private UpdateChainWrapper<PaymentOrder> paymentUpdateReturning(boolean updated) {
-        UpdateChainWrapper<PaymentOrder> update = mock(UpdateChainWrapper.class, Answers.RETURNS_SELF);
+        UpdateChainWrapper<PaymentOrder> update = mock(UpdateChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(paymentOrderService.update()).thenReturn(update);
         when(update.update()).thenReturn(updated);
         return update;

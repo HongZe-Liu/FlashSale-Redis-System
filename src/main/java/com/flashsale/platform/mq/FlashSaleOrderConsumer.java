@@ -19,7 +19,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -260,7 +260,7 @@ public class FlashSaleOrderConsumer {
                 businessMetrics.recordMqPublishFailure(destination, "confirm_nack");
                 return false;
             }
-            if (correlationData.getReturnedMessage() != null) {
+            if (correlationData.getReturned() != null) {
                 log.error("RabbitMQ forwarded message was returned as unroutable, exchange={}, routingKey={}, correlationId={}, payload={}",
                         exchange, routingKey, correlationId, payload);
                 businessMetrics.recordMqPublishFailure(destination, "returned");

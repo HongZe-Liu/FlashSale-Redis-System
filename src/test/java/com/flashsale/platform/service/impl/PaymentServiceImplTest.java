@@ -16,11 +16,11 @@ import com.flashsale.platform.provider.PaymentProvider;
 import com.flashsale.platform.provider.PaymentProviderResult;
 import com.flashsale.platform.service.IOrderService;
 import com.flashsale.platform.service.IPaymentOrderService;
+import com.flashsale.platform.support.MockitoChainAnswers;
 import com.flashsale.platform.utils.RedisIdWorker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -394,7 +394,7 @@ class PaymentServiceImplTest {
 
     @SuppressWarnings("unchecked")
     private QueryChainWrapper<PaymentOrder> paymentOrderQueryReturning(PaymentOrder paymentOrder) {
-        QueryChainWrapper<PaymentOrder> query = mock(QueryChainWrapper.class, Answers.RETURNS_SELF);
+        QueryChainWrapper<PaymentOrder> query = mock(QueryChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(paymentOrderService.query()).thenReturn(query);
         doReturn(paymentOrder).when(query).one();
         return query;

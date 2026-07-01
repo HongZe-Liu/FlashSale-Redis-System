@@ -7,7 +7,7 @@ import com.flashsale.platform.service.IMerchantService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 @RestController
 @RequestMapping("/merchants")
 public class MerchantController {

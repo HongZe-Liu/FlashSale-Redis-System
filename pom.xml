@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.3.12.RELEASE</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -19,8 +19,8 @@
     <description>High-concurrency flash sale platform backend built with Spring Boot, Redis, RabbitMQ, and MySQL.</description>
 
     <properties>
-        <java.version>11</java.version>
-        <testcontainers.version>1.19.8</testcontainers.version>
+        <java.version>17</java.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
         <awaitility.version>4.2.1</awaitility.version>
     </properties>
 
@@ -54,8 +54,14 @@
         <!-- Persistence and infrastructure -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
-            <version>3.4.3</version>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>3.5.16</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>3.5.16</version>
         </dependency>
 
         <dependency>
@@ -73,14 +79,14 @@
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson</artifactId>
-            <version>3.13.6</version>
+            <version>4.6.1</version>
         </dependency>
 
         <!-- API documentation and observability -->
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-ui</artifactId>
-            <version>1.7.0</version>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.17</version>
         </dependency>
 
         <dependency>
@@ -187,7 +193,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>11</release>
+                    <release>17</release>
                 </configuration>
             </plugin>
 

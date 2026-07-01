@@ -1,15 +1,15 @@
-FROM maven:3.9.9-eclipse-temurin-11 AS build
+FROM maven:3.9.9-eclipse-temurin-17 AS build
 
 WORKDIR /workspace
 
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
-RUN ./mvnw -B -DskipTests dependency:go-offline
+RUN MAVEN_CONFIG= ./mvnw -B -DskipTests dependency:go-offline
 
 COPY src src
-RUN ./mvnw -B -DskipTests package
+RUN MAVEN_CONFIG= ./mvnw -B -DskipTests package
 
-FROM eclipse-temurin:11-jre-jammy
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 

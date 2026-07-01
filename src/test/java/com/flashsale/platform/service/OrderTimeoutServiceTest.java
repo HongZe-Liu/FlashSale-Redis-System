@@ -9,10 +9,10 @@ import com.flashsale.platform.entity.PaymentOrder;
 import com.flashsale.platform.enums.OrderStatus;
 import com.flashsale.platform.enums.PaymentStatus;
 import com.flashsale.platform.observability.BusinessMetrics;
+import com.flashsale.platform.support.MockitoChainAnswers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -171,7 +171,7 @@ class OrderTimeoutServiceTest {
 
     @SuppressWarnings("unchecked")
     private QueryChainWrapper<Order> expiredOrderQueryReturning(Order... orders) {
-        QueryChainWrapper<Order> query = mock(QueryChainWrapper.class, Answers.RETURNS_SELF);
+        QueryChainWrapper<Order> query = mock(QueryChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(orderService.query()).thenReturn(query);
         doReturn(orders.length == 0 ? Collections.emptyList() : Collections.singletonList(orders[0]))
                 .when(query)
@@ -188,7 +188,7 @@ class OrderTimeoutServiceTest {
 
     @SuppressWarnings("unchecked")
     private UpdateChainWrapper<Order> orderUpdateReturning(boolean updated) {
-        UpdateChainWrapper<Order> update = mock(UpdateChainWrapper.class, Answers.RETURNS_SELF);
+        UpdateChainWrapper<Order> update = mock(UpdateChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(orderService.update()).thenReturn(update);
         doReturn(updated).when(update).update();
         return update;
@@ -196,7 +196,7 @@ class OrderTimeoutServiceTest {
 
     @SuppressWarnings("unchecked")
     private UpdateChainWrapper<PaymentOrder> paymentOrderUpdateReturning(boolean updated) {
-        UpdateChainWrapper<PaymentOrder> update = mock(UpdateChainWrapper.class, Answers.RETURNS_SELF);
+        UpdateChainWrapper<PaymentOrder> update = mock(UpdateChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(paymentOrderService.update()).thenReturn(update);
         doReturn(updated).when(update).update();
         return update;
@@ -204,7 +204,7 @@ class OrderTimeoutServiceTest {
 
     @SuppressWarnings("unchecked")
     private UpdateChainWrapper<FlashSaleOffer> offerUpdateReturning(boolean updated) {
-        UpdateChainWrapper<FlashSaleOffer> update = mock(UpdateChainWrapper.class, Answers.RETURNS_SELF);
+        UpdateChainWrapper<FlashSaleOffer> update = mock(UpdateChainWrapper.class, MockitoChainAnswers::returnsSelfForChainMethods);
         when(flashSaleOfferService.update()).thenReturn(update);
         doReturn(updated).when(update).update();
         return update;

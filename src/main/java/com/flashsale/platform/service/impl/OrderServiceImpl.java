@@ -23,7 +23,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Collections;
 
@@ -107,7 +107,7 @@ public class OrderServiceImpl
         Long userId = order.getUserId();
         Long offerId = order.getOfferId();
 
-        int count = query()
+        long count = query()
                 .eq("offer_id", offerId)
                 .eq("user_id", userId)
                 .count();

@@ -9,7 +9,7 @@ import com.flashsale.platform.utils.CacheClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.concurrent.TimeUnit;
 
 import static com.flashsale.platform.utils.RedisConstants.CACHE_MERCHANT_KEY;
